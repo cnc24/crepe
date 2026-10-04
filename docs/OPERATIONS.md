@@ -6,8 +6,9 @@ installation, PATH setup, capture permissions and a first working example.
 ## Using Crepe locally
 
 The user-facing executable is **`crepe`**. Cargo is Rust's build manager and is
-needed only for a source build or update. The current public repository has no
-published binary assets; use the source installation in Getting started.
+needed only for a source build or update. Ready-made binaries are available in
+[Releases](https://github.com/cnc24/crepe/releases/tag/v1.1.0); Getting started
+covers both binary and source installation.
 Run the following examples from the cloned repository root, where `example.pcap`
 and `fixtures/` are supplied synthetic test data:
 

@@ -4,10 +4,81 @@ This guide takes a new macOS or Linux installation through preparation,
 installation and a first analysis. Run commands in Terminal. After installation,
 you use **`crepe`**; Cargo is needed only to build or update it.
 
-The current public repository has no published binary release assets yet. The
-source installation below is the available installation route. Do not assume a
-`brew install crepe`, `apt install crepe` or `cargo install crepe` registry
-package exists. This guide installs directly from this repository.
+## Install a ready-made release (recommended)
+
+Download [Crepe v1.1.0](https://github.com/cnc24/crepe/releases/tag/v1.1.0).
+Choose the asset for your operating system and CPU. **Rust, Cargo and compiler
+installation are not required for these binaries.**
+
+| System | Download |
+| --- | --- |
+| macOS Apple Silicon (arm64) | `crepe-1.1.0-darwin-arm64.tar.gz` and its `.sha256` file |
+| Ubuntu/Debian x86-64 | `crepe_1.1.0_amd64.deb` and its `.sha256` file |
+| Fedora x86-64 | `crepe-1.1.0-1.x86_64.rpm` and its `.sha256` file |
+| Other compatible Linux x86-64 | `crepe-1.1.0-linux-x86_64.tar.gz` and its `.sha256` file |
+
+The Linux binaries need libpcap and compatible system libraries. Native package
+managers check dependencies; the generic archive is not a statically linked,
+universal Linux binary. No Windows, Intel Mac or Linux ARM64 binary is currently
+provided. Use the source route below for a supported platform without a matching
+binary. The macOS executable declares a minimum deployment target of macOS 11;
+validation was performed on current macOS CI and locally on macOS 27, not every
+older macOS release. It is not Apple Developer ID-notarized; if macOS requests
+approval, use its normal Privacy & Security flow for downloaded software you trust.
+
+### Apple Silicon Mac
+
+Download the macOS archive and checksum into Downloads, then run:
+
+```sh
+cd "$HOME/Downloads"
+shasum -a 256 -c crepe-1.1.0-darwin-arm64.tar.gz.sha256
+mkdir -p crepe-1.1.0
+tar -xzf crepe-1.1.0-darwin-arm64.tar.gz -C crepe-1.1.0
+mkdir -p "$HOME/.local/bin"
+install -m 755 crepe-1.1.0/crepe "$HOME/.local/bin/crepe"
+export PATH="$HOME/.local/bin:$PATH"
+crepe --version
+crepe choclate
+```
+
+The archive also includes the English manual and license notices. Keep them
+with any copy you redistribute. Add the PATH line once to `~/.zshrc` to keep the
+command available in new terminals. If another installation is selected, check
+`command -v crepe` or invoke `"$HOME/.local/bin/crepe"` explicitly.
+
+### Ubuntu/Debian or Fedora x86-64
+
+From the directory containing the downloaded package and checksum, use the
+commands for your distribution:
+
+```sh
+# Ubuntu/Debian
+sha256sum -c crepe_1.1.0_amd64.deb.sha256
+sudo apt install ./crepe_1.1.0_amd64.deb
+
+# Fedora: use these instead
+sha256sum -c crepe-1.1.0-1.x86_64.rpm.sha256
+sudo dnf install ./crepe-1.1.0-1.x86_64.rpm
+```
+
+Then run `crepe --version` and `crepe choclate`. These packages also contain a
+Linux service definition; configuring and starting a background sensor is a
+separate step described in the operations manual.
+
+For the generic Linux archive, verify with `sha256sum -c`, extract the `.tar.gz`,
+and install its `crepe` executable in `~/.local/bin` as in the Mac example. Obtain
+libpcap from your distribution. Use a native package or a source build if the
+binary reports an incompatible GLIBC or missing shared library.
+
+You can now proceed to **Live traffic** below. The bundled sample-capture
+examples require the source checkout (`git clone https://github.com/cnc24/crepe.git`
+and `cd crepe`), but building the source is unnecessary when using a release binary.
+You can also select one of your own PCAP/PCAPNG files in the interactive menu.
+
+The remaining preparation/build steps are **only for installation from source**.
+Do not assume an unrelated `brew install crepe`, `apt install crepe` registry
+package is this project.
 
 ## 1. Prepare your computer
 
@@ -209,6 +280,12 @@ files or live packet analysis.
 | No live observations | Check the selected interface, generate traffic and wait for the bounded capture to finish. |
 
 ## Update or uninstall
+
+For a release installation, download and verify a newer matching asset, stop
+Crepe, and repeat the binary/package installation steps. Remove a native Linux
+package with `sudo apt remove crepe` or `sudo dnf remove crepe`; data and local
+configuration may remain. Stop any configured sensor service before removal.
+
 
 To update, stop running Crepe processes, return to your cloned repository and
 run the following. Back up persistent stores before an upgrade; consult the
