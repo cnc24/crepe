@@ -1,0 +1,19 @@
+[package]
+name = "crepe-storage"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+ipnet.workspace = true
+crepe-core = { path = "../crepe-core" }
+serde.workspace = true
+serde_json.workspace = true
+blake3 = "1"
+datafusion = { version = "55.1", default-features = false, features = ["parquet", "sql", "string_expressions", "datetime_expressions"] }
+parquet = { version = "59.2", default-features = false, features = ["arrow", "snap", "zstd"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+futures = "0.3"

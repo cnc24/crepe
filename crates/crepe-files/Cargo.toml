@@ -1,0 +1,11 @@
+[package]
+name = "crepe-files"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+[lints]
+workspace = true
+[dependencies]
+crepe-core = { path = "../crepe-core" }
+sha2 = "0.10"
+httparse = "1"

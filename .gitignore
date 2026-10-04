@@ -1,0 +1,26 @@
+/target/
+.DS_Store
+*.pcap
+*.pcapng
+!/example.pcap
+!/fixtures/*.pcap
+!/fixtures/*.pcapng
+__pycache__/
+
+!fixtures/protocols.pcap
+!fixtures/fragments.pcap
+*.parquet
+fuzz/target/
+fuzz/artifacts/
+fuzz/corpus/
+/dist/
+
+# Local analysis stores and provisional metadata journals.
+/history/
+/history-*/
+/case/
+/combined/
+**/writer.lock
+**/.hot.jsonl
+**/.hot-new-*
+**/.staging-*

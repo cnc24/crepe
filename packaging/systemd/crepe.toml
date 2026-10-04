@@ -1,0 +1,14 @@
+schema_version = 1
+sensor = "local-sensor"
+profile = "complete"
+# Set the actual interface before starting the service.
+interface = "eth0"
+store = "/var/lib/crepe"
+flair = false
+max_streams = 1024
+max_buffer_bytes = 4194304
+dns_port = 53
+notices = true
+
+# Keep the sensor running on malformed packet payloads; emit explicit anomalies.
+tolerant_decode = true

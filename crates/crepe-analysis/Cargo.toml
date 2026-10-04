@@ -1,0 +1,23 @@
+[package]
+name = "crepe-analysis"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+crepe-files = { path = "../crepe-files" }
+crepe-core = { path = "../crepe-core" }
+serde.workspace = true
+crepe-packet = { path = "../crepe-packet" }
+crepe-stream = { path = "../crepe-stream" }
+crepe-dns = { path = "../crepe-dns" }
+crepe-flow = { path = "../crepe-flow" }
+
+crepe-protocol = { path = "../crepe-protocol" }
+crepe-fragment = { path = "../crepe-fragment" }
+
+[dev-dependencies]
+crepe-capture = { path = "../crepe-capture" }

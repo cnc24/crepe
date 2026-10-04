@@ -1,0 +1,37 @@
+[package]
+name = "crepe-cli"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[[bin]]
+name = "crepe"
+path = "src/main.rs"
+
+[dependencies]
+crepe-core = { path = "../crepe-core" }
+crepe-capture = { path = "../crepe-capture" }
+crepe-query = { path = "../crepe-query" }
+crepe-flow = { path = "../crepe-flow" }
+crepe-analysis = { path = "../crepe-analysis" }
+crepe-packet = { path = "../crepe-packet" }
+crepe-engine = { path = "../crepe-engine" }
+crepe-storage = { path = "../crepe-storage" }
+crepe-collector = { path = "../crepe-collector" }
+clap.workspace = true
+serde_json.workspace = true
+
+serde.workspace = true
+ctrlc = { version = "3.5", features = ["termination"] }
+tempfile = "3"
+
+[features]
+default = []
+live = ["crepe-capture/live"]
+plugins = ["crepe-engine/plugins"]
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+pcap-file.workspace = true

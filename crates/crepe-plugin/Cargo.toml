@@ -1,0 +1,12 @@
+[package]
+name = "crepe-plugin"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+[lints]
+workspace = true
+[dependencies]
+crepe-core = { path = "../crepe-core" }
+serde.workspace = true
+serde_json.workspace = true
+wasmtime = { version = "49.0.2", default-features = false, features = ["std", "runtime", "cranelift", "component-model", "wat"] }

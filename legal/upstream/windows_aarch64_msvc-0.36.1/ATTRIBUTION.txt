@@ -1,0 +1,16 @@
+Upstream package windows_aarch64_msvc 0.36.1 declares MIT OR Apache-2.0 in Cargo.toml.
+Upstream repository: https://github.com/microsoft/windows-rs
+Authors declared by upstream: Microsoft
+The published package does not contain a standalone license text. Crepe selects
+its declared MIT alternative and supplies the standard MIT text in this bundle.
+No upstream copyright year is invented. Any attribution in the README below
+is retained. This supplement records package metadata; it is not an additional
+license grant from Crepe.
+
+Upstream version identity:
+{
+  "git": {
+    "sha1": "9deec0ee3b51a9a540f6dfe984ee34e2409ed355"
+  },
+  "path_in_vcs": "crates/targets/aarch64_msvc"
+}

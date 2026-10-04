@@ -1,0 +1,91 @@
+Crepe Source Available License 1.0
+SPDX-License-Identifier: LicenseRef-Crepe-Source-Available-1.0
+
+Copyright (c) 2026 Crepe contributors
+
+1. Scope and definitions
+
+"Software" means the Crepe code and documentation supplied with this license,
+including modifications to that material. Separately licensed third-party
+material is excluded and remains governed by its own license.
+"Licensor" means the copyright holders entitled to grant rights in the Software.
+"You" means the individual or legal entity exercising rights under this license.
+"Internal Use" means use for your own operations, including a company's analysis
+of its own networks, security and infrastructure. Employees and contractors may
+operate the Software solely on your behalf for that purpose. It does not include
+providing Software functionality, network analysis or monitoring to external
+customers as a paid service.
+"Commercial Offering" means a product or service supplied to third parties for
+a fee or other commercial consideration that includes, embeds, bundles, resells
+or exposes the Software or its functionality. This includes paid appliances,
+software products, hosted APIs, SaaS, managed monitoring and paid customer
+network-analysis services. An offering remains commercial if the Software is
+advertised as a free component of a paid bundle. Merely using the Software to
+secure or operate your own business infrastructure does not make your unrelated
+products or services a Commercial Offering under this license.
+
+2. Free permission
+
+Subject to these terms, Licensor grants You a worldwide, non-exclusive,
+royalty-free copyright license to inspect, run, copy and modify the Software
+for personal use, education, research, evaluation and Internal Use, including
+Internal Use by for-profit companies. You may evaluate a proposed Commercial
+Offering internally, but may not deploy or distribute that offering to external
+customers under this free permission.
+
+You may redistribute the Software, including modified versions, without charge
+for the Software and outside a Commercial Offering. Every recipient must receive
+this license and the existing copyright and third-party notices. Your changes
+must be identified. Rights in the supplied Crepe material may not be offered to
+recipients on terms that waive this license's restrictions. This license does
+not require You to publish modifications used solely internally.
+
+3. Commercial license required
+
+The free permission does not authorize a Commercial Offering. Before embedding,
+bundling, selling, licensing or making the Software or its functionality
+available as part of such an offering, You must obtain a separate written
+commercial license from Licensor covering that activity and agree its fees and
+terms. This license sets no price and grants no automatic commercial entitlement.
+Contact the repository owner at https://github.com/cnc24/crepe to arrange a
+commercial agreement. A contribution, donation or issue does not itself grant
+commercial rights. Contractors operating solely for a customer's Internal Use
+under section 1 are permitted; offering managed analysis or monitoring to
+customers is a Commercial Offering requiring a commercial license.
+
+4. Reserved rights and compliance
+
+Except for the permissions expressly granted here, rights are reserved. No
+trademark rights, endorsement, support, maintenance or service commitments are
+granted. This license does not authorize access to networks or data without
+permission or otherwise excuse compliance with applicable law. Ordinary data
+and reports produced by the Software do not become subject to this license
+merely because the Software processed them; this does not authorize operating
+a Commercial Offering under the free permission.
+
+5. Termination
+
+The permissions under this license terminate if You breach its conditions.
+They are reinstated when You remedy the breach within 30 days after first
+receiving written notice from Licensor, unless a previous breach by You has
+already been cured under this provision. Termination does not terminate the
+rights of recipients who independently comply with this license.
+
+6. Warranty and liability
+
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED "AS IS",
+WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. TO THE EXTENT PERMITTED
+BY APPLICABLE LAW, LICENSOR IS NOT LIABLE FOR CLAIMS, DAMAGES OR OTHER LIABILITY
+ARISING FROM THE SOFTWARE OR ITS USE. NOTHING HERE EXCLUDES LIABILITY OR RIGHTS
+THAT APPLICABLE LAW DOES NOT ALLOW TO BE EXCLUDED.
+
+7. Third-party rights and separate agreements
+
+This license does not relicense third-party dependencies. Licensor grants rights
+only to the extent Licensor is entitled to grant them. A separate written
+commercial agreement governs the rights it expressly grants. Nothing in this
+license revokes rights previously granted to a recipient under another license.
+
+This is a source-available license with commercial-use restrictions, not an
+OSI-approved open-source license.

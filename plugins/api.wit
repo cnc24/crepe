@@ -1,0 +1,8 @@
+package crepe:plugin@1.0.0;
+
+/// No WASI or host imports. Guest state lives in bounded linear memory.
+/// Input is a version-1 historical observation envelope serialized as JSON.
+/// Output is JSON Lines, at most 64 objects / 64 KiB per invocation.
+world analyzer {
+    export process: func(event: string) -> string;
+}

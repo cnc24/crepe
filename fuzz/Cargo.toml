@@ -1,0 +1,26 @@
+[package]
+name = "crepe-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+[package.metadata]
+cargo-fuzz = true
+[dependencies]
+crepe-files = { path = "../crates/crepe-files" }
+crepe-security = { path = "../crates/crepe-security" }
+libfuzzer-sys = "0.4"
+crepe-core = { path = "../crates/crepe-core" }
+crepe-query = { path = "../crates/crepe-query" }
+crepe-packet = { path = "../crates/crepe-packet" }
+crepe-dns = { path = "../crates/crepe-dns" }
+crepe-protocol = { path = "../crates/crepe-protocol" }
+crepe-fragment = { path = "../crates/crepe-fragment" }
+crepe-collector = { path = "../crates/crepe-collector" }
+[workspace]
+members = ["."]
+[[bin]]
+name = "parsers"
+path = "fuzz_targets/parsers.rs"
+test = false
+doc = false
+bench = false

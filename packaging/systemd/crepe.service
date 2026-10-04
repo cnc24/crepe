@@ -1,0 +1,27 @@
+[Unit]
+Description=Crepe network analysis sensor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=crepe
+ConfigurationDirectory=crepe
+ExecStart=/usr/bin/crepe --serious --log-format json --metrics 127.0.0.1:9091 daemon --config /etc/crepe/crepe.toml
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_RAW CAP_NET_ADMIN
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+UMask=0077
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

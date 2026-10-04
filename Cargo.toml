@@ -1,0 +1,20 @@
+[workspace]
+members = ["crates/crepe-plugin", "crates/crepe-files", "crates/crepe-security", "crates/crepe-core", "crates/crepe-packet", "crates/crepe-capture", "crates/crepe-query", "crates/crepe-flow", "crates/crepe-cli", "crates/crepe-stream", "crates/crepe-dns", "crates/crepe-analysis", "crates/crepe-fragment", "crates/crepe-protocol", "crates/crepe-collector", "crates/crepe-storage", "crates/crepe-engine"]
+resolver = "2"
+
+[workspace.package]
+version = "1.1.0"
+edition = "2021"
+rust-version = "1.96"
+license-file = "LICENSE"
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+etherparse = "0.21"
+pcap-file = "2"
+ipnet = "2"
+clap = { version = "4", features = ["derive"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"

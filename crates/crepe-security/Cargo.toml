@@ -1,0 +1,12 @@
+[package]
+name = "crepe-security"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+[lints]
+workspace = true
+[dependencies]
+crepe-core = { path = "../crepe-core" }
+serde.workspace = true
+serde_json.workspace = true
+ipnet.workspace = true

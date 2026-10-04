@@ -1,0 +1,11 @@
+[package]
+name = "crepe-fragment"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+crepe-core = { path = "../crepe-core" }

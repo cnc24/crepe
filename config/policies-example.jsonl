@@ -1,0 +1,1 @@
+{"id":"lab-dns-query","event_type":"dns.query","field":"proto","equals":"udp","message":"Observed a DNS query in the lab","severity":"info"}

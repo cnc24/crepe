@@ -1,0 +1,7 @@
+schema_version = 1
+sensor = "lab-mac"
+profile = "complete"
+max_streams = 1024
+max_buffer_bytes = 4194304
+dns_port = 53
+notices = true

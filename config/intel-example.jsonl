@@ -1,0 +1,2 @@
+{"kind":"domain","value":"example.test","source":"synthetic-lab","severity":"info"}
+{"kind":"cidr","value":"192.0.2.0/24","source":"documentation-network","severity":"info"}

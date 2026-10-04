@@ -1,0 +1,23 @@
+[package]
+name = "crepe-engine"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+[lints]
+workspace = true
+[dependencies]
+crepe-core = { path = "../crepe-core" }
+crepe-capture = { path = "../crepe-capture" }
+crepe-packet = { path = "../crepe-packet" }
+crepe-flow = { path = "../crepe-flow" }
+crepe-analysis = { path = "../crepe-analysis" }
+crepe-storage = { path = "../crepe-storage" }
+crepe-collector = { path = "../crepe-collector" }
+serde.workspace = true
+serde_json.workspace = true
+toml = "0.9"
+crepe-security = { path = "../crepe-security" }
+crepe-plugin = { path = "../crepe-plugin", optional = true }
+
+[features]
+plugins = ["dep:crepe-plugin"]

@@ -1,0 +1,10 @@
+{
+  "api_version": 1,
+  "name": "example-notice",
+  "component": "notice.wat",
+  "subscriptions": ["dns.query", "tls.client_hello"],
+  "memory_bytes": 1048576,
+  "fuel_per_event": 10000,
+  "max_events": 10000,
+  "permissions": []
+}

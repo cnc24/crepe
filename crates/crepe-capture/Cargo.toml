@@ -1,0 +1,19 @@
+[package]
+name = "crepe-capture"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+crepe-core = { path = "../crepe-core" }
+crepe-packet = { path = "../crepe-packet" }
+pcap-file.workspace = true
+
+pcap = { version = "2.5", optional = true }
+
+[features]
+default = []
+live = ["dep:pcap"]

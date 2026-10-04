@@ -1,0 +1,22 @@
+[package]
+name = "crepe-query"
+version.workspace = true
+edition.workspace = true
+license-file.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+crepe-core = { path = "../crepe-core" }
+ipnet.workspace = true
+
+[dev-dependencies]
+crepe-capture = { path = "../crepe-capture" }
+criterion = { version = "0.8.2", default-features = false }
+crepe-protocol = { path = "../crepe-protocol" }
+crepe-files = { path = "../crepe-files" }
+
+[[bench]]
+name = "pipeline"
+harness = false

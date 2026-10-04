@@ -1,0 +1,53 @@
+# Crepe
+
+Linux-first network research and analysis in Rust, developed and tested on macOS.
+The 1.1 release candidate implements the core full-platform roadmap. See the [release gates](docs/RELEASE-1.1.md)
+and [design choices and limits](docs/DESIGN-STATUS.md).
+
+A modular Cargo workspace covering capture, packet filters, bounded IP/TCP
+reassembly, DNS/TLS/HTTP/SSH observations, NetFlow/IPFIX collection and
+Arrow/Parquet history queried through DataFusion. Current main also includes
+indicator/rule matching, HTTP file hashes, bounded WASM components, a live
+sensor daemon, Prometheus counters, parallel affinity workers, bounded live CQL
+windows, compressed/partitioned history, crash recovery and native Linux packaging.
+
+**[User manual: setup, commands, profiles and troubleshooting](docs/OPERATIONS.md)**
+
+```sh
+cargo install --path crates/crepe-cli --all-features --locked
+crepe read example.pcap 'dst.port == 443'
+crepe analyze fixtures/protocols.pcap
+crepe profiles
+crepe nutella fixtures/protocols.pcap
+crepe suzette fixtures/dns.pcap --store ./case
+crepe ingest fixtures/dns.pcap --store ./history --sensor lab
+crepe query ./history 'event.type == flow.end | group proto | sort bytes desc'
+crepe collect --listen 127.0.0.1:2055 --duration 30 --store ./history
+```
+
+Default builds support offline analysis, storage and UDP flow collection.
+`--all-features` additionally enables live libpcap capture (`capture`, alias
+`sucre`), `interfaces` and sandboxed WASM components. Install `libpcap-dev` on Linux for live builds;
+macOS provides libpcap. Live capture needs OS capture permissions.
+Rust 1.96+ is required by the current component runtime. CLI errors have stable codes and a
+little French humor: *Sacré bleu!* JSON, tables and CSV are supported for
+packet/flow/application output; historical queries use JSON Lines.
+
+- [Operations, profiles, limits and recovery](docs/OPERATIONS.md)
+- [Schema, IDs and historical CQL](docs/SCHEMA.md)
+- [Project architecture](docs/ARCHITECTURE.md)
+- [Current release acceptance](docs/RELEASE-1.1.md)
+- [Validation record](docs/VALIDATION.md)
+
+This is a passive research platform. TLS analysis reads cleartext handshake
+metadata; HTTP/SSH support covers initial headers/banners. It does not decrypt
+traffic, recover missing capture bytes, block network traffic or provide a
+web interface. See the documented per-engine limits before interpreting an
+incomplete capture. Synthetic fixtures contain no user network traffic.
+
+The current development tree uses the [Crepe Source Available License 1.0](LICENSE).
+Personal use and internal company use are free. Embedding in paid products,
+reselling, or providing paid hosted/managed analysis requires a separate written
+commercial license. This is source-available, not OSI open source.
+See [licensing examples](docs/LICENSING.md).
+This repository starts with a clean source-available history.
