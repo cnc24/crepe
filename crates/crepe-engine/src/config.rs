@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum Profile {
     Sucre,
-    Nutella,
+    Choclate,
     Banane,
     Suzette,
     Maison,
@@ -125,7 +125,7 @@ impl Config {
         matches!(
             self.profile,
             Profile::Sucre
-                | Profile::Nutella
+                | Profile::Choclate
                 | Profile::Suzette
                 | Profile::Maison
                 | Profile::Complete
@@ -134,13 +134,13 @@ impl Config {
     pub fn flows(&self) -> bool {
         matches!(
             self.profile,
-            Profile::Nutella | Profile::Suzette | Profile::Maison | Profile::Complete
+            Profile::Choclate | Profile::Suzette | Profile::Maison | Profile::Complete
         )
     }
     pub fn analysis(&self) -> bool {
         matches!(
             self.profile,
-            Profile::Nutella | Profile::Suzette | Profile::Maison | Profile::Complete
+            Profile::Choclate | Profile::Suzette | Profile::Maison | Profile::Complete
         )
     }
     pub fn accepts(&self, kind: &str) -> bool {

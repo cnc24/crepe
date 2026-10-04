@@ -75,7 +75,7 @@ release gates are recorded in [docs/RELEASE-1.0.md](docs/RELEASE-1.0.md).
 - [ ] CQL flow/event fields, comparisons, projections and aggregation pipelines.
 - [ ] Flow trace/timeline and stable links between packet, flow and L7 events.
 - [ ] Notice/intelligence/policy framework with bounded matching state.
-- [ ] Nutella/Banane/Suzette/Maison/Complète profiles after their engines exist.
+- [ ] Choclate/Banane/Suzette/Maison/Complète profiles after their engines exist.
 - [ ] Worker-local state with canonical flow affinity after profiling justifies it.
 
 AF_PACKET/TPACKET_V3, AF_XDP, distributed operation, full DPI, plugin execution

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Rename the deep-analysis recipe and profile to `choclate`, including CLI,
+  configuration values, examples and documentation. Update existing profile
+  configurations to use `profile = "choclate"`.
+
 ## 1.1.0 — initial source-available candidate
 
 - Initial publication snapshot under Crepe Source Available License 1.0.

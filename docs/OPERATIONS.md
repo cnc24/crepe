@@ -28,7 +28,7 @@ crepe read example.pcap 'proto == tcp' --format json
 crepe flows fixtures/flows.pcap
 crepe analyze fixtures/protocols.pcap --format table
 crepe profiles
-crepe nutella fixtures/protocols.pcap
+crepe choclate fixtures/protocols.pcap
 crepe suzette fixtures/protocols.pcap
 
 # Use a fresh store for this demo; identical imports are rejected.
@@ -78,12 +78,12 @@ letters/digits/underscore/hyphen. `config [FILE]` prints effective JSON.
 | --- | --- |
 | `crepe sucre -i INTERFACE` | Live packet capture (alias for `capture`) |
 | `crepe banane --listen udp://127.0.0.1:2055` | NetFlow v5/v9 and IPFIX collector (alias for `collect`) |
-| `crepe nutella -i INTERFACE` | Network analysis: packets, flows, reassembly, DNS/TLS/HTTP/SSH, anomalies and notices |
+| `crepe choclate -i INTERFACE` | Network analysis: packets, flows, reassembly, DNS/TLS/HTTP/SSH, anomalies and notices |
 | `crepe suzette incident.pcapng --store ./case` | Capture forensics with persistent history for query/trace/timeline |
 | `crepe maison FILE --config config/example.toml` | Use your own sensor, recipe and analysis resource settings |
 | `crepe complete -i INTERFACE` | All implemented packet-derived analysis engines |
 
-Nutella, Suzette, Maison and Complete also accept a capture file directly.
+Choclate, Suzette, Maison and Complete also accept a capture file directly.
 Without a file or `-i`, these commands show a source-selection menu in an
 interactive terminal. Scripts must specify the source explicitly. Maison accepts
 `--config FILE` with the current flat TOML schema in `config/example.toml`;
@@ -106,7 +106,7 @@ add `--listen IP:PORT` to collect UDP exporter records into the same live store.
 
 For scripted imports, `ingest --profile NAME` overrides the TOML profile;
 Banane is a collector and is rejected for PCAP ingestion. `flows` remains the
-flow-only command. An early private prototype profile mapping was incorrect: Nutella
+flow-only command. An early private prototype profile mapping was incorrect: Choclate
 was flow-only and Banane was DNS-only. Main corrects those meanings to match
 the design. Existing immutable stores remain readable; reprocess captures into
 a new store if the corrected selection is required.
@@ -392,7 +392,7 @@ crepe complete -i lo0 --listen udp://127.0.0.1:2055 --store ./combined --duratio
 crepe query ./combined 'event.type == flow.export | group proto'
 ```
 
-Use the appropriate Linux interface instead of `lo0`. Nutella/Maison/Complete
+Use the appropriate Linux interface instead of `lo0`. Choclate/Maison/Complete
 accept `--listen`, and daemon configuration accepts `collector_listen =
 "127.0.0.1:2055"`. One event pipeline and writer handles captured packets,
 exporter flows/options/notices, security rules and components. Exported flow
@@ -407,7 +407,7 @@ per packet/timer callback; sustained overload can cause socket drops.
 ## Live query windows
 
 ```sh
-crepe nutella -i lo0 --duration 30 --query 'event.type == packet | group proto | count' --query-interval 5
+crepe choclate -i lo0 --duration 30 --query 'event.type == packet | group proto | count' --query-interval 5
 crepe complete -i lo0 --listen 127.0.0.1:2055 --store ./history --query 'event.type == flow.export | group src.ip | sum bytes as total'
 ```
 
@@ -443,7 +443,7 @@ a failed automatic BPF compilation falls back to full capture with a diagnostic.
 
 ## Parallel live analysis
 
-`crepe nutella -i lo0 --workers 4` enables 1–16 live workers (`workers` in
+`crepe choclate -i lo0 --workers 4` enables 1–16 live workers (`workers` in
 TOML; default 1). The global TCP stream/buffer budgets and default flow/IP
 fragment budgets are divided across workers, rather than multiplied. Each
 worker has at most 16 queued owned capture records; the shared result queue

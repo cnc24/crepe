@@ -1,5 +1,6 @@
 > Historical planning document. Its proposed license choices are superseded by
 > the repository LICENSE; this document grants no alternative license to Crepe.
+> Profile naming has been updated to Choclate at the owner's request.
 
 # Crepe – Softwareplanung und technische Spezifikation
 
@@ -544,7 +545,7 @@ crepe banane --listen udp://0.0.0.0:2055
 
 ---
 
-## Crepe Nutella
+## Crepe Choclate
 
 Deep Network Analysis.
 
@@ -568,7 +569,7 @@ files
 Das entspricht dem Bereich, in dem Zeek heute arbeitet.
 
 ```bash
-crepe nutella -i eth0
+crepe choclate -i eth0
 ```
 
 ---
@@ -618,14 +619,14 @@ Canonical Syntax:
 
 ```bash
 crepe run \
-    --profile nutella \
+    --profile choclate \
     --profile banane
 ```
 
 Convenience:
 
 ```bash
-crepe nutella-banane
+crepe choclate-banane
 ```
 
 Zusätzlich:
@@ -638,7 +639,7 @@ Zusätzlich:
 Beispiel:
 
 ```bash
-crepe nutella \
+crepe choclate \
     -i eth0 \
     --disable http \
     --enable ja4
@@ -776,7 +777,7 @@ anomaly.ip_fragment_overlap
 
 # 18. TCP State Engine
 
-Für Nutella benötigen wir vollständiges Connection Tracking.
+Für Choclate benötigen wir vollständiges Connection Tracking.
 
 ```text
 SYN
@@ -1862,7 +1863,7 @@ crepe query \
 Security:
 
 ```bash
-crepe nutella -i eth0 \
+crepe choclate -i eth0 \
  'type == anomaly'
 ```
 
@@ -2700,7 +2701,7 @@ paths
 environment variables
 ```
 
-`Crêpe Nutella` kann als interner/Profile-Arbeitstitel bleiben; vor öffentlicher Vermarktung würde ich Namen fremder Marken noch separat prüfen.
+`Crêpe Choclate` ist der aktualisierte Profilname für die tiefe Netzwerkanalyse.
 
 ---
 
@@ -2878,7 +2879,7 @@ crepe query \
 
 ---
 
-# 80. Milestone 6 – Nutella Core
+# 80. Milestone 6 – Choclate Core
 
 Der große Zeek-Schritt.
 
@@ -2900,7 +2901,7 @@ SSH
 Danach:
 
 ```bash
-crepe nutella -i eth0
+crepe choclate -i eth0
 ```
 
 ---

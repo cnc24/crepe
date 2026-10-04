@@ -85,7 +85,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
                 },
             )
         }
-        Command::Nutella(args) => crate::recipes::run(crepe_engine::Profile::Nutella, args),
+        Command::Choclate(args) => crate::recipes::run(crepe_engine::Profile::Choclate, args),
         Command::Suzette(args) => crate::recipes::run(crepe_engine::Profile::Suzette, args),
         Command::Maison(args) => crate::recipes::run(crepe_engine::Profile::Maison, args),
         Command::Complete(args) => crate::recipes::run(crepe_engine::Profile::Complete, args),
@@ -107,10 +107,10 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             crate::history::print_json(&summary)
         }
         Command::Profiles => crate::history::print_json(&serde_json::json!({
-            "greeting": "Bon appétit! Try crepe nutella, banane, suzette, maison or complete.",
+            "greeting": "Bon appétit! Try crepe choclate, banane, suzette, maison or complete.",
             "profiles": {
                 "sucre": "Packet metadata",
-                "nutella": "Deep network analysis: packets, flows, DNS/TLS/HTTP/SSH, anomalies and notices",
+                "choclate": "Deep network analysis: packets, flows, DNS/TLS/HTTP/SSH, anomalies and notices",
                 "banane": "NetFlow v5/v9 and IPFIX UDP collector",
                 "suzette": "Capture forensics, historical timeline and correlation",
                 "maison": "Your own configuration via --config FILE",

@@ -74,7 +74,7 @@ pub(crate) enum Command {
         stream_idle: u64,
     },
     /// Deep network analysis: packets, flows, reassembly and application metadata.
-    Nutella(RecipeArgs),
+    Choclate(RecipeArgs),
     /// Forensics: analyze a capture and query its historical observations.
     Suzette(RecipeArgs),
     /// Run with your own configuration.
@@ -177,7 +177,7 @@ pub enum Format {
 #[derive(Clone, Copy, ValueEnum)]
 pub(crate) enum Profile {
     Sucre,
-    Nutella,
+    Choclate,
     Banane,
     Suzette,
     Maison,
@@ -187,7 +187,7 @@ impl From<Profile> for crepe_engine::Profile {
     fn from(value: Profile) -> Self {
         match value {
             Profile::Sucre => Self::Sucre,
-            Profile::Nutella => Self::Nutella,
+            Profile::Choclate => Self::Choclate,
             Profile::Banane => Self::Banane,
             Profile::Suzette => Self::Suzette,
             Profile::Maison => Self::Maison,

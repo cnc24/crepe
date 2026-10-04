@@ -18,7 +18,7 @@ cargo install --path crates/crepe-cli --all-features --locked
 crepe read example.pcap 'dst.port == 443'
 crepe analyze fixtures/protocols.pcap
 crepe profiles
-crepe nutella fixtures/protocols.pcap
+crepe choclate fixtures/protocols.pcap
 crepe suzette fixtures/dns.pcap --store ./case
 crepe ingest fixtures/dns.pcap --store ./history --sensor lab
 crepe query ./history 'event.type == flow.end | group proto | sort bytes desc'

@@ -340,7 +340,7 @@ fn profile_menu_and_overrides_select_stored_observations() {
     assert!(menu.status.success());
     let menu: serde_json::Value = serde_json::from_slice(&menu.stdout).unwrap();
     assert_eq!(menu["profiles"].as_object().unwrap().len(), 6);
-    for profile in ["sucre", "nutella", "suzette", "maison", "complete"] {
+    for profile in ["sucre", "choclate", "suzette", "maison", "complete"] {
         let dir = temp_dir();
         let config = dir.join("config.toml");
         std::fs::write(&config, "profile = \"complete\"\n").unwrap();
@@ -400,7 +400,7 @@ fn profile_menu_and_overrides_select_stored_observations() {
 
 #[test]
 fn direct_recipes_match_the_design_and_maison_uses_configuration() {
-    for name in ["nutella", "suzette", "complete"] {
+    for name in ["choclate", "suzette", "complete"] {
         let output = cli()
             .arg(name)
             .arg(fixture("fixtures/protocols.pcap"))
@@ -445,7 +445,7 @@ fn direct_recipes_match_the_design_and_maison_uses_configuration() {
         assert_eq!(row["event_type"], "packet");
         assert_eq!(row["sensor"], "custom");
     }
-    let output = cli().arg("nutella").output().unwrap();
+    let output = cli().arg("choclate").output().unwrap();
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("source menu"));
     let output = cli()
@@ -524,7 +524,7 @@ fn config_layers_and_module_overrides() {
     assert_eq!(config["sensor"], "env");
     assert_eq!(config["max_streams"], 42);
     let result = cli()
-        .arg("nutella")
+        .arg("choclate")
         .arg(fixture("fixtures/protocols.pcap"))
         .args(["--disable", "tls"])
         .output()
@@ -600,7 +600,7 @@ fn explicit_notice_enable_overrides_config_and_disable_wins() {
         (vec!["--enable", "notices", "--disable", "notices"], false),
     ] {
         let out = cli()
-            .arg("nutella")
+            .arg("choclate")
             .arg(fixture("fixtures/dns.pcap"))
             .arg("--config")
             .arg(&config)
