@@ -1,0 +1,211 @@
+{
+  "versions": {
+    "crepe": "crepe 1.1.0",
+    "zeek": "/opt/homebrew/bin/zeek version 9.0.0",
+    "silk": "rwcut: part of SiLK 3.24.2; configuration settings:\n    * Root of packed data tree:         /data\n    * Packing logic:                    Run-time plug-in\n    * Timezone support:                 UTC\n    * Available compression methods:    none [default], zlib\n    * IPv6 network connections:         yes\n    * IPv6 flow record support:         yes\n    * IPset record compatibility:       1.0.0\n    * IPFIX/NetFlow9/sFlow collection:  no\n    * Transport encryption:             GnuTLS\n    * PySiLK support:                   no\n    * Enable assert():                  no\nCopyright (C) 2001-2026 Carnegie Mellon University\nGNU General Public License (GPL) Rights pursuant to Version 2, June 1991.\nSome included library code covered by LGPL 2.1; see source for details.\nGovernment Purpose License Rights (GPLR) pursuant to DFARS 252.227-7013.\nSend bug reports, feature requests, and comments to netsa-help@cert.org."
+  },
+  "crepe_commit": "8a201bc9f34f559a5101d32f5827dc2c866dd345",
+  "host": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "checks": {
+    "tls_sni": true,
+    "http_host_method_uri": true,
+    "ssh_banner": true,
+    "dns_question": true,
+    "dns_answer": true,
+    "fixture_flow_packets_ip_bytes": true,
+    "generated_udp_flows_packets_ip_bytes": true,
+    "generated_udp_zeek_conn_only": true,
+    "silk_export_records": true,
+    "crepe_export_records": true,
+    "historical_filtered_byte_sum": true
+  },
+  "edge_observations": {
+    "dns": {
+      "crepe_event_types": {
+        "dns.query": 3,
+        "dns.response": 2
+      },
+      "zeek_log_rows": {
+        "conn.log": 3,
+        "packet_filter.log": 1,
+        "weird.log": 2,
+        "dns.log": 3
+      }
+    },
+    "fragments": {
+      "crepe_event_types": {
+        "dns.query": 2
+      },
+      "zeek_log_rows": {
+        "conn.log": 2,
+        "packet_filter.log": 1,
+        "weird.log": 1,
+        "dns.log": 2
+      }
+    }
+  },
+  "dataset": {
+    "udp_flows": 10000,
+    "udp_packets": 200000,
+    "netflow_records": 3000,
+    "expected_filtered_bytes": 1708000,
+    "sha256": {
+      "udp.pcap": "9181ee2f9f18f2061d971af25f19b5d666880ed849fa6c1c6fccfc1a4fa98acb",
+      "exports.pdu": "0cb9066d7da15208e4e7405fe867b791ee96326edf1a3ae1cc700863fc3e33cb",
+      "big-endian.pcap": "f9490fc3eac5f5ef1ac7fd2f07727e84fe77f0d25571fc3ea436ca105cf197bf",
+      "dns-malformed.pcap": "c5b0caef39fe21f16e13c5fc093036264b3a33aea32cb22f8cf37e8277c33cc5",
+      "dns.pcap": "aad50889a60d23f1d82520ae143371bd6fd4c9a5a184b1b6932bdb79e749145c",
+      "flows.pcap": "82ed516c8512761d9deefb0c27fb2190fe7512d07a674e4308773635e26a973b",
+      "fragments.pcap": "6e5bba88bdf451695ff50db3ec36b4f62b3094aa46f530db300de2e240a41d23",
+      "nanosecond.pcap": "d218cb344279d095ea1869a3fc69c46e258c45f13eceb9965c81f51862827c28",
+      "protocols.pcap": "62af8d019888d838593a7d98f5af2141b8fb8be5d9d654fee904ffee30a14648"
+    }
+  },
+  "measurements": {
+    "crepe-flows": {
+      "samples": [
+        {
+          "seconds": 0.18900908299838193,
+          "peak_rss_bytes": 30801920
+        },
+        {
+          "seconds": 0.13916812500247033,
+          "peak_rss_bytes": 30736384
+        },
+        {
+          "seconds": 0.15396599999803584,
+          "peak_rss_bytes": 30769152
+        },
+        {
+          "seconds": 0.13933120800356846,
+          "peak_rss_bytes": 30736384
+        },
+        {
+          "seconds": 0.14158204100385774,
+          "peak_rss_bytes": 30720000
+        }
+      ],
+      "median_seconds": 0.14158204100385774,
+      "min_seconds": 0.13916812500247033,
+      "max_seconds": 0.18900908299838193,
+      "median_peak_rss_bytes": 30736384
+    },
+    "zeek-flows": {
+      "samples": [
+        {
+          "seconds": 0.8472320000000764,
+          "peak_rss_bytes": 267452416
+        },
+        {
+          "seconds": 0.7501657500033616,
+          "peak_rss_bytes": 260997120
+        },
+        {
+          "seconds": 0.8114647090042126,
+          "peak_rss_bytes": 274628608
+        },
+        {
+          "seconds": 0.7616541660026996,
+          "peak_rss_bytes": 260751360
+        },
+        {
+          "seconds": 0.6191982089949306,
+          "peak_rss_bytes": 212140032
+        }
+      ],
+      "median_seconds": 0.7616541660026996,
+      "min_seconds": 0.6191982089949306,
+      "max_seconds": 0.8472320000000764,
+      "median_peak_rss_bytes": 260997120
+    },
+    "zeek-conn": {
+      "samples": [
+        {
+          "seconds": 0.7300806250059395,
+          "peak_rss_bytes": 273055744
+        },
+        {
+          "seconds": 0.6039379170033499,
+          "peak_rss_bytes": 194822144
+        },
+        {
+          "seconds": 0.5623664160011685,
+          "peak_rss_bytes": 200949760
+        },
+        {
+          "seconds": 0.5252069580019452,
+          "peak_rss_bytes": 176685056
+        },
+        {
+          "seconds": 0.5522467080008937,
+          "peak_rss_bytes": 233209856
+        }
+      ],
+      "median_seconds": 0.5623664160011685,
+      "min_seconds": 0.5252069580019452,
+      "max_seconds": 0.7300806250059395,
+      "median_peak_rss_bytes": 200949760
+    },
+    "crepe-query": {
+      "samples": [
+        {
+          "seconds": 0.027828624995891005,
+          "peak_rss_bytes": 42467328
+        },
+        {
+          "seconds": 0.016178624995518476,
+          "peak_rss_bytes": 42450944
+        },
+        {
+          "seconds": 0.016298583999741822,
+          "peak_rss_bytes": 42713088
+        },
+        {
+          "seconds": 0.015395540998724755,
+          "peak_rss_bytes": 42663936
+        },
+        {
+          "seconds": 0.015975708003679756,
+          "peak_rss_bytes": 42549248
+        }
+      ],
+      "median_seconds": 0.016178624995518476,
+      "min_seconds": 0.015395540998724755,
+      "max_seconds": 0.027828624995891005,
+      "median_peak_rss_bytes": 42549248
+    },
+    "silk-query": {
+      "samples": [
+        {
+          "seconds": 0.017979374999413267,
+          "peak_rss_bytes": 11911168
+        },
+        {
+          "seconds": 0.02170750000368571,
+          "peak_rss_bytes": 11911168
+        },
+        {
+          "seconds": 0.020476876001339406,
+          "peak_rss_bytes": 11927552
+        },
+        {
+          "seconds": 0.01646545799303567,
+          "peak_rss_bytes": 11911168
+        },
+        {
+          "seconds": 0.015403208999487106,
+          "peak_rss_bytes": 11911168
+        }
+      ],
+      "median_seconds": 0.017979374999413267,
+      "min_seconds": 0.015403208999487106,
+      "max_seconds": 0.02170750000368571,
+      "median_peak_rss_bytes": 11911168
+    }
+  },
+  "method": "One untimed warmup; seeded mixed order; five repetitions by default; wall clock includes startup and output. wait4 records fresh per-process peak RSS. SiLK query time is the sum of sequential filter and aggregate processes; RSS is their maximum, not a sum. Page caches are not cleared. Flow extraction: Crepe flows vs Zeek default scripts and bare mode with base/protocols/conn; output/schema/work differ. Query: same logical filter/sum, different native storage/layout. No universal speed or safety ranking.",
+  "test_date": "2026-10-04",
+  "host_cpu": "Apple M2 Pro",
+  "host_ram_bytes": 17179869184
+}

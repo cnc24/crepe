@@ -44,6 +44,7 @@ packet/flow/application output; historical queries use JSON Lines.
 - [Project architecture](docs/ARCHITECTURE.md)
 - [Current release acceptance](docs/RELEASE-1.1.md)
 - [Validation record](docs/VALIDATION.md)
+- [Measured comparison with Zeek/SiLK and command examples](docs/COMPARISON.md)
 
 This is a passive research platform. TLS analysis reads cleartext handshake
 metadata; HTTP/SSH support covers initial headers/banners. It does not decrypt
