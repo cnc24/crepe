@@ -12,6 +12,9 @@ pub(crate) fn apply_flair(flair: bool) {
         SERIOUS.store(true, Ordering::Relaxed);
     }
 }
+pub(crate) fn flair_enabled() -> bool {
+    !SERIOUS.load(Ordering::Relaxed) && !JSON.load(Ordering::Relaxed)
+}
 pub(crate) fn emit(args: std::fmt::Arguments<'_>) {
     let original = args.to_string();
     let mut message = original.as_str();

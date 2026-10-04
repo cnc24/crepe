@@ -18,16 +18,41 @@ fn input(prompt: &str) -> Result<String> {
     Ok(value.into())
 }
 
-fn select_source(args: &mut RecipeArgs) -> Result<()> {
+fn select_source(profile: Profile, args: &mut RecipeArgs) -> Result<()> {
     if !io::stdin().is_terminal() {
         return Err(Error::new(
             "CREPE-CLI-001",
             "Choose a capture file or --interface NAME; run this recipe in a terminal for the source menu.",
         ));
     }
-    crate::report!(
-        "Bon appétit! Choose your ingredients:\n  1  Capture file\n  2  Live network interface"
-    );
+    let (description, aside) = match profile {
+        Profile::Choclate => (
+            "Choclate: deep network analysis of packets, flows and DNS/TLS/HTTP/SSH metadata.",
+            "Layers of insight, served without decrypting your TLS.",
+        ),
+        Profile::Suzette => (
+            "Suzette: investigate traffic and optionally save observations with --store for later queries.",
+            "Follow the evidence; leave the flambé to the kitchen.",
+        ),
+        Profile::Maison => (
+            "Maison: analyze traffic using the profile and settings from your configuration.",
+            "Your recipe, our kitchen.",
+        ),
+        Profile::Complete => (
+            "Complete: run all available packet-analysis engines; add --listen for NetFlow/IPFIX collection.",
+            "The full menu, with resource limits included.",
+        ),
+        Profile::Sucre => ("Sucre: inspect captured packets.", "The simple recipe."),
+        Profile::Banane => ("Banane: receive NetFlow/IPFIX records.", "Let the flows come to you."),
+    };
+    crate::report!("{description}");
+    let prompt = if crate::reporting::flair_enabled() {
+        crate::report!("Bon appétit! {aside}");
+        "Choose your ingredients:"
+    } else {
+        "Choose a source:"
+    };
+    crate::report!("{prompt}\n  1  Capture file\n  2  Live network interface");
     match input("Source [1/2]: ")?.as_str() {
         "1" => args.file = Some(input("Capture file path: ")?.into()),
         "2" => {
@@ -94,7 +119,7 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
         ));
     }
     if args.file.is_none() && args.interface.is_none() {
-        select_source(&mut args)?;
+        select_source(profile, &mut args)?;
     }
     if (args.listen.is_some() || args.query.is_some()) && args.interface.is_none() {
         return Err(Error::new(

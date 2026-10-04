@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Explain each interactive analysis recipe before source selection, with optional
+  French/culinary flair and a factual `--serious` presentation.
+
 - Add a complete end-user setup guide for macOS, Ubuntu/Debian and Fedora,
   including prerequisites, installation, capture permissions and troubleshooting.
 

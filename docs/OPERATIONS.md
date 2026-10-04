@@ -74,6 +74,11 @@ letters/digits/underscore/hyphen. `config [FILE]` prints effective JSON.
 | `crepe complete -i INTERFACE` | All implemented packet-derived analysis engines |
 
 Choclate, Suzette, Maison and Complete also accept a capture file directly.
+When they open the interactive source menu, they first explain the selected
+recipe in one sentence, followed by a short culinary aside. `--serious` or
+`flair = false` keeps the explanation and removes the aside. Explicit file or
+interface commands do not print this introduction; observation output remains
+machine-readable.
 Without a file or `-i`, these commands show a source-selection menu in an
 interactive terminal. Scripts must specify the source explicitly. Maison accepts
 `--config FILE` with the current flat TOML schema in `config/example.toml`;

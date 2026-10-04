@@ -32,22 +32,28 @@ def finish(proc):
 
 with tempfile.TemporaryDirectory(prefix='crepe-recipe-smoke-') as directory:
     directory = Path(directory)
-    # A bare command really opens a menu in a terminal, then reads the chosen file.
-    master, slave = pty.openpty()
-    proc = subprocess.Popen([binary, 'choclate'], stdin=slave,
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    os.close(slave)
-    try:
-        ready(proc, 'Choose your ingredients')
-        os.write(master, f'1\n{Path("fixtures/protocols.pcap").resolve()}\n'.encode())
-        rows = finish(proc)
-        assert any(row['event_type'] == 'tls.client_hello' for row in rows)
-    finally:
-        os.close(master)
-        if proc.poll() is None:
-            proc.kill()
-            proc.communicate()
-    print('PASS: bare crepe choclate source menu -> file -> TLS observations.')
+    # Bare recipes explain their purpose before prompting, without polluting JSON data.
+    for recipe in ['choclate', 'suzette', 'maison', 'complete']:
+        for serious in [False, True]:
+            master, slave = pty.openpty()
+            command = [binary, recipe] + (['--serious'] if serious else [])
+            proc = subprocess.Popen(command, stdin=slave,
+                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            os.close(slave)
+            try:
+                ready(proc, recipe.capitalize() + ':')
+                if not serious:
+                    ready(proc, 'Bon appétit!')
+                ready(proc, 'Choose a source:' if serious else 'Choose your ingredients:')
+                os.write(master, f'1\n{Path("fixtures/protocols.pcap").resolve()}\n'.encode())
+                rows = finish(proc)
+                assert any(row['event_type'] == 'tls.client_hello' for row in rows)
+            finally:
+                os.close(master)
+                if proc.poll() is None:
+                    proc.kill()
+                    proc.communicate()
+    print('PASS: bare recipe descriptions, flair/serious menus and clean JSON TLS observations.')
 
     # Real local DNS datagram through live Choclate, including custom DNS port.
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server:
