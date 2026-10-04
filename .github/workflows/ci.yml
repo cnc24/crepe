@@ -1,0 +1,89 @@
+name: CI
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+env:
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
+  CARGO_INCREMENTAL: 0
+jobs:
+  check:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Install Linux live-capture build dependency
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+      - run: python3 scripts/check-architecture.py
+      - run: cargo fmt --check
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+      - name: Test portable offline build
+        run: cargo test --workspace --locked
+      - run: cargo test --workspace --all-features --locked
+      - run: cargo build --release --all-features --locked
+      - run: ./target/release/crepe read example.pcap 'dst.port == 443'
+      - run: ./target/release/crepe read fixtures/example.pcapng 'proto == icmpv6' --format json
+      - run: ./target/release/crepe flows fixtures/flows.pcap --format csv
+      - run: ./target/release/crepe analyze fixtures/dns.pcap --format json
+      - run: python3 scripts/generate-fixtures.py && git diff --exit-code -- example.pcap fixtures
+      - name: Loopback live capture and replay
+        run: sudo python3 scripts/smoke-live.py --binary target/release/crepe
+      - name: Local DNS UDP and TCP capture and analysis
+        run: sudo python3 scripts/smoke-dns.py --binary target/release/crepe
+      - name: Full platform loopback and historical acceptance
+        run: sudo python3 scripts/smoke-platform.py --binary target/release/crepe
+      - name: Direct recipes and interactive source selection
+        run: sudo python3 scripts/smoke-recipes.py
+      - name: Service shutdown, metrics and checkpoints
+        run: sudo python3 scripts/smoke-service.py
+      - name: Synthetic streaming baseline
+        run: python3 scripts/benchmark.py --packets 200000
+      - name: Bounded parallel-worker pressure
+        run: |
+          cargo build --release --example pressure --all-features --locked
+          python3 scripts/soak.py --seconds 60
+      - name: Statistical microbenchmarks
+        run: cargo bench -p crepe-query --bench pipeline -- --quick
+      - name: Package local platform artifact
+        run: python3 scripts/package.py
+      - name: Native Debian package
+        if: runner.os == 'Linux'
+        run: python3 scripts/package-linux.py --format deb
+      - name: Install Debian package and verify service definition
+        if: runner.os == 'Linux'
+        run: |
+          sudo dpkg -i dist/*.deb
+          /usr/bin/crepe read example.pcap 'dst.port == 443'
+          systemd-analyze verify packaging/systemd/crepe.service
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crepe-${{ runner.os }}-${{ runner.arch }}
+          path: dist/*
+
+  rpm:
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Native RPM build dependencies
+        run: dnf install -y --allowerasing git gcc gcc-c++ make clang pkgconf-pkg-config libpcap-devel rpm-build python3 curl tar gzip findutils
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --all-features --locked
+      - run: python3 scripts/package-linux.py --format rpm
+      - name: Install and validate native RPM
+        run: |
+          rpm -Uvh dist/*.rpm
+          /usr/bin/crepe read example.pcap 'dst.port == 443'
+          /usr/bin/crepe profiles
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crepe-Fedora-RPM
+          path: dist/*
