@@ -11,10 +11,16 @@ indicator/rule matching, HTTP file hashes, bounded WASM components, a live
 sensor daemon, Prometheus counters, parallel affinity workers, bounded live CQL
 windows, compressed/partitioned history, crash recovery and native Linux packaging.
 
-**[User manual: setup, commands, profiles and troubleshooting](docs/OPERATIONS.md)**
+**New user? Start with [preparation and installation](docs/GETTING-STARTED.md).**
+It covers macOS/Linux prerequisites, installation, your first capture, permissions
+and troubleshooting. The public repository currently has no binary release
+assets; the guide provides the complete source-installation route.
+
+**[User manual: commands, profiles and troubleshooting](docs/OPERATIONS.md)**
+
+After installing, run these examples from the cloned repository directory:
 
 ```sh
-cargo install --path crates/crepe-cli --all-features --locked
 crepe read example.pcap 'dst.port == 443'
 crepe analyze fixtures/protocols.pcap
 crepe profiles

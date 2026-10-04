@@ -1,25 +1,15 @@
 # Operating Crepe
 
-Rust 1.96 or later; Linux first, macOS supported. Offline builds need no capture
-permissions. `--features live` needs libpcap headers/runtime (Linux:
-`libpcap-dev`; macOS: system libpcap). DataFusion makes the first build larger
-than the capture-only versions. Allow several GB of build disk space.
+New users: follow [Getting started](GETTING-STARTED.md) for OS preparation,
+installation, PATH setup, capture permissions and a first working example.
 
 ## Using Crepe locally
 
-The user-facing executable is **`crepe`**. Cargo is Rust's development/build
-manager; it is not needed for everyday use of a prebuilt executable.
-Download the archive for your OS/CPU from this private repository's Releases,
-extract it and put its `crepe` executable in a directory on your PATH.
-For development, build and install from the repository once:
-
-```sh
-cargo install --path crates/crepe-cli --all-features --locked
-```
-
-This installs `crepe` in Cargo's binary directory (normally `~/.cargo/bin`),
-which must be on PATH. Run the following examples from the repository root,
-where `example.pcap` and `fixtures/` are supplied synthetic test data:
+The user-facing executable is **`crepe`**. Cargo is Rust's build manager and is
+needed only for a source build or update. The current public repository has no
+published binary assets; use the source installation in Getting started.
+Run the following examples from the cloned repository root, where `example.pcap`
+and `fixtures/` are supplied synthetic test data:
 
 ```sh
 crepe --help

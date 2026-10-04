@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Add a complete end-user setup guide for macOS, Ubuntu/Debian and Fedora,
+  including prerequisites, installation, capture permissions and troubleshooting.
+
 - Rename the deep-analysis recipe and profile to `choclate`, including CLI,
   configuration values, examples and documentation. Update existing profile
   configurations to use `profile = "choclate"`.
