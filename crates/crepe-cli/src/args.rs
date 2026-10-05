@@ -5,7 +5,7 @@ use std::path::PathBuf;
     name = "crepe",
     version,
     about = "Packet capture and flow explorer",
-    after_help = "Start here:\n  read FILE [FILTER]     Inspect packets (CQL or tcpdump filters).\n  flows FILE [FILTER]    Summarize connections.\n  capture -i INTERFACE  Inspect live packets.\n\nAnalysis recipes:\n  chocolate / suzette / complete  Analyze packets, flows and application metadata.\n  maison                         Use your configured analysis settings.\n  Run a recipe without arguments for source selection. File recipes print JSON\n  after analysis finishes; live recipes stream observations. Use --store PATH\n  to retain history, then query PATH 'YOUR QUERY'.\n\nPresentation:\n  Recipe names select analysis workflows; --serious only disables humorous\n  diagnostics. It does not change analysis. Help and data output stay factual."
+    after_help = "Start here:\n  read FILE [FILTER]     Inspect packets (CQL or tcpdump filters).\n  flows FILE [FILTER]    Summarize connections.\n  capture -i INTERFACE  Inspect live packets.\n\nAnalysis recipes:\n  chocolate  Deep protocol and connection analysis.\n  suzette    Persistent forensic case, statistics, timeline and trace.\n  complete   All implemented packet engines; --listen adds exporter input.\n  maison     Use your configured analysis settings.\n  Run a recipe without arguments for source selection. File recipes print JSON\n  after analysis finishes; live recipes stream observations. Use --store PATH\n  to retain history, then query PATH 'YOUR QUERY'.\n\nPresentation:\n  Recipe names select analysis workflows; --serious only disables humorous\n  diagnostics. It does not change analysis. Help and data output stay factual."
 )]
 pub(crate) struct Cli {
     /// Disable French flair in runtime messages.
@@ -92,9 +92,9 @@ pub(crate) enum Command {
     /// Deep network analysis: packets, flows, reassembly and application metadata.
     #[command(alias = "choclate")]
     Chocolate(RecipeArgs),
-    /// Analysis recipe: packets, flows and application metadata as JSON.
+    /// Forensic case: persistent history, statistics, timeline and trace.
     #[command(
-        long_about = "Analyze packets, flows and DNS/TLS/HTTP/SSH metadata. File input is fully processed before JSON Lines are printed (up to 10,000 observations). Use --store PATH to retain all observations, then crepe query PATH 'YOUR QUERY'. Live input streams observations as they become available. No arguments opens source selection. Suzette currently uses the same analysis engines as chocolate; it is not an automatic incident verdict.",
+        long_about = "Analyze packets, flows and DNS/TLS/HTTP/SSH metadata. File input is fully processed before JSON Lines are printed (up to 10,000 observations). Use --store PATH to retain all observations, then crepe query PATH 'YOUR QUERY'. Live input streams observations as they become available. No arguments opens source selection. Suzette retains a forensic case by default in ./crepe-cases/case-*/history; --store chooses its location. Use timeline and trace to investigate the retained observations. Decoders are shared with chocolate, but the forensic history is retained automatically. The source capture is not copied.",
         after_help = "Examples:\n  crepe suzette traffic.pcap --store history\n  crepe query history '* | limit 20'\n  crepe suzette --interface lo --duration 10"
     )]
     Suzette(RecipeArgs),
@@ -242,7 +242,7 @@ pub(crate) struct RecipeArgs {
     /// Live capture duration in seconds.
     #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..=86400))]
     pub duration: u64,
-    /// Keep observations in this historical store. Otherwise use temporary storage.
+    /// Historical store location. Suzette creates a persistent case by default; other file recipes use temporary storage.
     #[arg(long)]
     pub store: Option<PathBuf>,
     /// Load your own sensor, recipe and resource settings.

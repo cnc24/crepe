@@ -2,6 +2,8 @@
 
 ## 1.2.2 — 2026-10-05
 
+- Restore Suzette’s forensic workflow: automatically retain a case unless a store is explicitly selected, and show statistics/timeline/trace commands. Other offline recipes remain temporary by default.
+
 - Fix Linux `capture -i any` on loopback traffic (SLL/ARPHRD_LOOPBACK); test live ICMP capture and replay on Linux.
 - Accept `interface` as an alias for `interfaces`.
 - Keep help factual, explain recipe workflows and Suzette's current behavior.

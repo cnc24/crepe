@@ -31,7 +31,7 @@ fn select_source(profile: Profile, args: &mut RecipeArgs) -> Result<()> {
             "Layers of insight, served without decrypting your TLS.",
         ),
         Profile::Suzette => (
-            "Suzette: investigate traffic and optionally save observations with --store for later queries.",
+            "Suzette: preserve a forensic case for historical queries, timelines and conversation traces.",
             "Follow the evidence; leave the flambé to the kitchen.",
         ),
         Profile::Maison => (
@@ -127,6 +127,25 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
             "live collection/query requires a network interface, not a capture file",
         ));
     }
+    let forensic = matches!(config.profile, Profile::Suzette);
+    if forensic && args.store.is_none() {
+        let root = std::env::current_dir()
+            .map_err(|e| Error::new("CREPE-IO-002", e))?
+            .join("crepe-cases");
+        std::fs::create_dir_all(&root).map_err(|e| Error::new("CREPE-IO-002", e))?;
+        let case = tempfile::Builder::new()
+            .prefix("case-")
+            .tempdir_in(&root)
+            .map_err(|e| Error::new("CREPE-IO-002", e))?
+            .keep();
+        args.store = Some(case.join("history"));
+    }
+    if let Some(store) = args.store.as_ref().filter(|_| forensic) {
+        crate::report!(
+            "Forensic case: {}. Observations will be retained; the source capture is not copied.",
+            store.display()
+        );
+    }
     if let Some(interface) = &args.interface {
         #[cfg(feature = "live")]
         {
@@ -198,6 +217,9 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
             if summary.observations == 0 {
                 crate::report!("No observations produced. Check interface traffic and enabled analysis modules.");
             }
+            if let Some(store) = args.store.as_ref().filter(|_| forensic) {
+                report_case(store);
+            }
             return Ok(());
         }
         #[cfg(not(feature = "live"))]
@@ -242,5 +264,15 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
     } else if summary.observations > 10_000 {
         crate::report!("Oh là là! Use --store PATH to retain and query all observations.");
     }
+    if forensic {
+        report_case(&store);
+    }
     crate::history::query(&store, "* | sort timestamp | limit 10000")
+}
+
+fn report_case(store: &std::path::Path) {
+    let path = format!("'{}'", store.to_string_lossy().replace('\'', "'\\''"));
+    crate::report!("Case ready. Statistics: crepe query {path} '* | group event.type | count'");
+    crate::report!("Timeline: crepe timeline {path} --limit 20");
+    crate::report!("Conversation correlation: crepe trace {path} FLOW_ID (use a 64-character flow_id from an observation)");
 }

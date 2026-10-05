@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-recipe-smoke-') as directory:
         for serious in [False, True]:
             master, slave = pty.openpty()
             command = [binary, recipe] + (['--serious'] if serious else [])
-            proc = subprocess.Popen(command, stdin=slave,
+            proc = subprocess.Popen(command, stdin=slave, cwd=directory,
                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             os.close(slave)
             try:
@@ -58,6 +58,24 @@ with tempfile.TemporaryDirectory(prefix='crepe-recipe-smoke-') as directory:
                     proc.kill()
                     proc.communicate()
     print('PASS: bare recipe descriptions, flair/serious menus and clean JSON TLS observations.')
+
+    # Suzette also retains a live forensic case without an explicit --store.
+    forensic_root = directory / 'live-forensics'
+    forensic_root.mkdir()
+    interface = 'lo0' if os.uname().sysname == 'Darwin' else 'lo'
+    proc = subprocess.Popen([binary, 'suzette', '-i', interface, '--duration', '1'],
+                            cwd=forensic_root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        ready(proc, 'Capture ready')
+        finish(proc)
+        stores = list(forensic_root.glob('crepe-cases/case-*/history'))
+        assert len(stores) == 1 and (stores[0] / 'schema.json').exists()
+        subprocess.run([binary, 'query', str(stores[0]), '* | count'],
+                       check=True, capture_output=True, text=True, timeout=10)
+    finally:
+        if proc.poll() is None:
+            proc.kill(); proc.communicate()
+    print('PASS: Suzette retains a queryable live case without --store.')
 
     # Real local DNS datagram through live Chocolate, including custom DNS port.
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server:

@@ -10,8 +10,8 @@ pass its own final CI gates. Earlier private prototype history is not included.
 | Area | Implemented | Deliberate limits / future work |
 | --- | --- | --- |
 | Capture | PCAP/PCAPNG, libpcap, Ethernet/VLAN/IP/TCP/UDP/ICMP, export, conservative BPF hints, tolerant decoding | Automatic hints are Ethernet-only and admit VLAN/IPv6 broadly |
-| Flow/analysis | Bounded IP/TCP reconstruction, passive flows, DNS/TLS/HTTP/SSH, idle expiry, affinity workers | Coarse IP-pair affinity favors fragment correctness; initial L7 metadata, no endpoint TCP emulation |
-| Recipes | Direct Sucre/Banane/Chocolate/Suzette/Maison/Complete, combined live capture/export, module switches, layered config, serious mode | Explicit `--listen` combines packet/export sources; flat TOML rather than the design's nested sketch |
+| Flow/analysis | Bounded IP/TCP reconstruction, passive flows, DNS/TLS/HTTP/SSH, idle expiry, affinity workers | Coarse IP-pair affinity favors fragment correctness; initial L7 metadata, no DHCP decoder, no endpoint TCP emulation |
+| Recipes | Direct Sucre/Banane/Chocolate/Suzette/Maison/Complete, combined live capture/export, module switches, layered config, serious mode; Suzette retains a forensic case by default | Explicit `--listen` combines packet/export sources; flat TOML rather than the design's nested sketch |
 | Queries | Typed packet CQL, richer historical CQL, bounded live windows, hot-tail plus historical queries | Processing-time windows; no event-time retractions or distributed streaming SQL |
 | Storage | Arrow/partitioned ZSTD Parquet, atomic imports/checkpoints, crash recovery, copy-based retention/compaction | Retention is an explicit operation into a new store; scheduling/deleting the old copy is operator-controlled |
 | Security | Parser/reassembly anomalies, DNS-change notices, bounded indicators/rules, HTTP body SHA-256 | Feeds loaded at startup; exact passive rules; first complete supported Content-Length body |

@@ -18,7 +18,7 @@ Every command supports `--help`.
 | `flows FILE [FILTER]` | Bidirectional TCP/UDP counters; `--details`, `--format`, `--filter-syntax`, `--max-flows`, `--tcp-idle`, `--udp-idle`, `--active-timeout` |
 | `analyze FILE` | Reassembly and application observations; `--format table\|json\|csv`, `--dns-port`, `--max-streams`, `--max-buffer-bytes`, `--stream-idle` |
 | `chocolate [FILE]` | Deep-analysis recipe; without a source, opens the interactive menu |
-| `suzette [FILE]` | Forensic-analysis recipe |
+| `suzette [FILE]` | Persistent forensic case; `--store DIR` selects the history location |
 | `maison [FILE] --config FILE` | Analysis using your own configuration |
 | `complete [FILE]` | All implemented observation modules |
 | `profiles` | List recipes and descriptions |
@@ -285,7 +285,7 @@ Chocolate, Suzette, Maison and Complete also accept a capture file directly.
 When they open the interactive source menu, they first explain the selected
 recipe in one sentence, followed by a short culinary aside. `--serious` or
 `flair = false` keeps the explanation and removes the aside. Explicit file or
-interface commands do not print this introduction; observation output remains
+interface commands print processing status on stderr; observation output remains
 machine-readable.
 Without a file or `-i`, these commands show a source-selection menu in an
 interactive terminal. Scripts must specify the source explicitly. Maison accepts
@@ -303,7 +303,8 @@ is not capped at 10,000 observations.
 
 Offline recipe output is sorted by timestamp and capped at 10,000 observations.
 Use `--store PATH` to retain all observations for later queries. Without it,
-the offline temporary store is removed after output. For formatted tables use
+Suzette creates a persistent case in `./crepe-cases/case-*/history`; other offline
+recipes remove their temporary store after output. For formatted tables use
 `read`, `flows` or `analyze`. `complete` runs the packet-derived engines;
 add `--listen IP:PORT` to collect UDP exporter records into the same live store.
 
@@ -697,13 +698,15 @@ Parquet only. Backups still use `schema.json` and `data/`; `.hot.jsonl` and
 ### Recipe output and presentation
 
 `crepe suzette traffic.pcap --store history` analyzes packets, bidirectional flows
-and DNS/TLS/HTTP/SSH metadata. Suzette currently uses the same analysis engines as
-Chocolate; the name does not enable an automatic incident verdict. Offline recipes
+and DNS/TLS/HTTP/SSH metadata. Suzette shares packet/protocol decoders with
+Chocolate but retains a forensic case automatically. Offline recipes
 process the complete file and commit history before printing up to 10,000 JSON
 observations. Startup and periodic record counts go to stderr. Hashing and final
 history commit can also take time; record counts indicate input consumed, not a
 percentage complete. Use `crepe query history '* | limit 20'` to inspect saved data.
-Without `--store`, the temporary history is removed after output.
+Without `--store`, Suzette creates `./crepe-cases/case-*/history` and prints its
+location. It retains observations, not a copy of the original PCAP. Keep the source
+capture separately. Other offline recipes use temporary history.
 
 Live recipes stream observations as they become available; flow records can appear
 only at expiry or shutdown. Quiet interfaces can produce no observations. A final
@@ -714,3 +717,18 @@ Help and data output are factual. Recipe names choose workflows; `--serious`
 disables humorous runtime diagnostics without changing analysis. `crepe interface`
 and `crepe interfaces` both list capture interfaces. Linux `capture -i any` supports
 loopback IP traffic in cooked SLL/SLL2 captures.
+
+Suzette prints commands for grouped event statistics, a chronological timeline and
+conversation correlation (`trace`). Use the observation's 64-character `flow_id`
+for historical traces, not the short `CX-...` ID in the standalone flow table.
+`--store DIR` and configured stores take precedence over automatic case creation.
+Both forensic live sessions and offline imports retain their case; repeat runs
+without an explicit store create separate cases. Remove old cases explicitly when
+no longer needed. A failed run can leave an empty case directory.
+
+Profile boundaries are workflow boundaries, not separate implementations of DNS
+or TCP. Sucre emits packets; Banane receives exporter records; Chocolate performs
+deep analysis; Suzette retains forensic history; Maison uses the configured profile
+and limits; Complete enables the implemented packet engines with optional exporter
+input (`--listen`). Unimplemented design items, such as DHCP decoding, are not
+implicitly enabled by Complete. See [design status](DESIGN-STATUS.md).

@@ -401,7 +401,9 @@ fn profile_menu_and_overrides_select_stored_observations() {
 #[test]
 fn direct_recipes_match_the_design_and_maison_uses_configuration() {
     for name in ["chocolate", "suzette", "complete"] {
+        let case_root = tempfile::tempdir().unwrap();
         let output = cli()
+            .current_dir(case_root.path())
             .arg(name)
             .arg(fixture("fixtures/protocols.pcap"))
             .output()
@@ -837,7 +839,9 @@ fn recipe_help_and_processing_feedback_are_factual() {
     assert!(String::from_utf8(help.stdout)
         .unwrap()
         .contains("fully processed"));
+    let root = tempfile::tempdir().unwrap();
     let run = cli()
+        .current_dir(root.path())
         .args(["--serious", "suzette"])
         .arg(fixture("example.pcap"))
         .output()
@@ -865,4 +869,89 @@ fn singular_interface_alias_is_accepted() {
     assert!(String::from_utf8(output.stdout)
         .unwrap()
         .contains("capture interfaces"));
+}
+
+#[test]
+fn suzette_retains_a_queryable_case_by_default() {
+    let root = tempfile::tempdir().unwrap();
+    let run = cli()
+        .current_dir(root.path())
+        .arg("suzette")
+        .arg(fixture("fixtures/protocols.pcap"))
+        .output()
+        .unwrap();
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let cases: Vec<_> = std::fs::read_dir(root.path().join("crepe-cases"))
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(cases.len(), 1);
+    let store = cases[0].join("history");
+    let stats = cli()
+        .arg("query")
+        .arg(&store)
+        .arg("* | group event.type | count")
+        .output()
+        .unwrap();
+    assert!(
+        stats.status.success(),
+        "{}",
+        String::from_utf8_lossy(&stats.stderr)
+    );
+    assert!(!stats.stdout.is_empty());
+    let timeline = cli()
+        .arg("timeline")
+        .arg(&store)
+        .args(["--limit", "10000"])
+        .output()
+        .unwrap();
+    assert!(timeline.status.success());
+    let rows: Vec<serde_json::Value> = String::from_utf8(timeline.stdout)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let flow_id = rows.iter().find_map(|row| row["flow_id"].as_str()).unwrap();
+    let trace = cli()
+        .arg("trace")
+        .arg(&store)
+        .arg(flow_id)
+        .output()
+        .unwrap();
+    assert!(
+        trace.status.success(),
+        "{}",
+        String::from_utf8_lossy(&trace.stderr)
+    );
+    assert!(!trace.stdout.is_empty());
+    let explicit_root = tempfile::tempdir().unwrap();
+    let explicit_store = explicit_root.path().join("selected-history");
+    let explicit = cli()
+        .current_dir(explicit_root.path())
+        .arg("suzette")
+        .arg(fixture("fixtures/protocols.pcap"))
+        .arg("--store")
+        .arg(&explicit_store)
+        .output()
+        .unwrap();
+    assert!(explicit.status.success());
+    assert!(explicit_store.join("schema.json").exists());
+    assert!(!explicit_root.path().join("crepe-cases").exists());
+    let chocolate_root = tempfile::tempdir().unwrap();
+    let chocolate = cli()
+        .current_dir(chocolate_root.path())
+        .arg("chocolate")
+        .arg(fixture("fixtures/protocols.pcap"))
+        .output()
+        .unwrap();
+    assert!(chocolate.status.success());
+    assert!(!chocolate_root.path().join("crepe-cases").exists());
+    let menu = cli().args(["--serious", "profiles"]).output().unwrap();
+    assert!(!String::from_utf8(menu.stdout)
+        .unwrap()
+        .contains("Bon appétit"));
 }

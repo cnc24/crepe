@@ -117,14 +117,14 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             crate::history::print_json(&summary)
         }
         Command::Profiles => crate::history::print_json(&serde_json::json!({
-            "greeting": "Bon appétit! Try crepe chocolate, banane, suzette, maison or complete.",
+            "greeting": if crate::reporting::flair_enabled() { "Bon appétit! Choose an analysis workflow." } else { "Choose an analysis workflow." },
             "profiles": {
                 "sucre": "Packet metadata",
                 "chocolate": "Deep network analysis: packets, flows, DNS/TLS/HTTP/SSH, anomalies and notices",
                 "banane": "NetFlow v5/v9 and IPFIX UDP collector",
-                "suzette": "Capture forensics, historical timeline and correlation",
+                "suzette": "Persistent forensic case by default, historical queries, statistics, timeline and trace",
                 "maison": "Your own configuration via --config FILE",
-                "complete": "All implemented observations (same engines as maison)"
+                "complete": "All implemented packet-analysis engines; add --listen for NetFlow/IPFIX input"
             }
         })),
         Command::Config { file } => {

@@ -24,3 +24,5 @@ fuzz/corpus/
 **/.hot.jsonl
 **/.hot-new-*
 **/.staging-*
+
+/crepe-cases/
