@@ -749,7 +749,7 @@ fn portable_build_explains_missing_bpf_feature() {
 #[test]
 fn flow_summary_is_compact_directional_and_distinguishes_eof_from_close() {
     let output = cli()
-        .arg("flows")
+        .args(["flows", "--details"])
         .arg(fixture("fixtures/flows.pcap"))
         .output()
         .unwrap();
@@ -765,7 +765,7 @@ fn flow_summary_is_compact_directional_and_distinguishes_eof_from_close() {
     assert!(text.contains("end: input ended"));
     assert!(!text.contains("PKTS_A"));
     let output = cli()
-        .arg("flows")
+        .args(["flows", "--details"])
         .arg(fixture("example.pcap"))
         .args(["proto == tcp"])
         .output()
@@ -773,4 +773,55 @@ fn flow_summary_is_compact_directional_and_distinguishes_eof_from_close() {
     let text = String::from_utf8(output.stdout).unwrap();
     assert!(text.contains("end: input ended | observed TCP: SYN seen"));
     assert!(!text.contains("observed TCP: closed"));
+}
+
+#[test]
+fn default_flow_table_is_one_record_per_line() {
+    let output = cli()
+        .arg("flows")
+        .arg(fixture("fixtures/flows.pcap"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert_eq!(
+        text.lines().count(),
+        4,
+        "one header and three flows: {text}"
+    );
+    assert!(text.contains("START (UTC)") && text.contains("WIRE BYTES"));
+    let tcp = text.lines().find(|line| line.contains("50000")).unwrap();
+    assert!(tcp.contains("00:00:06.000") && tcp.contains("<->"));
+    let columns: Vec<_> = tcp.split_whitespace().collect();
+    assert_eq!(&columns[columns.len() - 2..], &["5", "270"]);
+    assert!(!text.contains("CX-") && !text.contains("end:"));
+    let output = cli()
+        .arg("flows")
+        .arg(fixture("example.pcap"))
+        .output()
+        .unwrap();
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text
+        .lines()
+        .any(|line| line.contains("[2001:db8::10]:50001") && line.contains("[2001:db8::20]:443")));
+}
+
+#[test]
+fn flow_details_does_not_change_machine_formats() {
+    for format in ["json", "csv"] {
+        let run = |details: bool| {
+            let mut command = cli();
+            command
+                .arg("flows")
+                .arg(fixture("fixtures/flows.pcap"))
+                .args(["--format", format]);
+            if details {
+                command.arg("--details");
+            }
+            let result = command.output().unwrap();
+            assert!(result.status.success());
+            result.stdout
+        };
+        assert_eq!(run(false), run(true));
+    }
 }

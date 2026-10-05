@@ -205,6 +205,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             filter_syntax,
             format,
             max_flows,
+            details,
             tcp_idle,
             udp_idle,
             active_timeout,
@@ -218,19 +219,21 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             })?;
             let input = capture::open(&file)?;
             let mut out = output::Output::new(io::BufWriter::new(io::stdout().lock()), format);
-            out.header(true)?;
+            if !details || !matches!(format, crate::Format::Table) {
+                out.header(true)?;
+            }
             capture::read_records(input, |record| {
                 if !filter.raw_matches(&record)? {
                     return Ok(true);
                 }
                 if let Some(event) = record.decode()? {
                     if filter.matches(&event) {
-                        table.push(&event, |flow| out.flow(&flow))?;
+                        table.push(&event, |flow| out.flow(&flow, details))?;
                     }
                 }
                 Ok(true)
             })?;
-            table.finish(|flow| out.flow(&flow))?;
+            table.finish(|flow| out.flow(&flow, details))?;
             if table.skipped_fragments != 0 || table.skipped_other_protocols != 0 {
                 crate::report!("Oh là là! Skipped {} fragmented and {} non-TCP/UDP packets for flow accounting.", table.skipped_fragments, table.skipped_other_protocols);
             }

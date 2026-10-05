@@ -15,7 +15,7 @@ Every command supports `--help`.
 | `read FILE [FILTER]` | Packet summaries; `--format table\|json\|csv`, `--limit N`, `--write FILE`, `--tolerant`, `--filter-syntax auto\|cql\|bpf` |
 | `capture -i IFACE [FILTER]` / `sucre` | Live packet summaries; read options plus `--duration SECONDS`, `--count N`, `--bpf FILTER`, `--promisc` |
 | `interfaces` | List available capture interfaces |
-| `flows FILE [FILTER]` | Bidirectional TCP/UDP counters; `--format`, `--filter-syntax`, `--max-flows`, `--tcp-idle`, `--udp-idle`, `--active-timeout` |
+| `flows FILE [FILTER]` | Bidirectional TCP/UDP counters; `--details`, `--format`, `--filter-syntax`, `--max-flows`, `--tcp-idle`, `--udp-idle`, `--active-timeout` |
 | `analyze FILE` | Reassembly and application observations; `--format table\|json\|csv`, `--dns-port`, `--max-streams`, `--max-buffer-bytes`, `--stream-idle` |
 | `chocolate [FILE]` | Deep-analysis recipe; without a source, opens the interactive menu |
 | `suzette [FILE]` | Forensic-analysis recipe |
@@ -130,10 +130,35 @@ answer count). TCP DNS, full resource records, HTTP and TLS details belong to
 HTTP bodies. JSON/CSV packet schemas and lossless Unix-nanosecond timestamps
 are unchanged for scripts.
 
-### Reading the flow summary (1.2.1)
+### Reading the flow table (1.2.2)
 
-`crepe flows FILE [FILTER]` now prints compact blocks instead of a wide A/B
-column table. Lines wrap at 80 columns without truncating addresses or counters,
+`crepe flows FILE [FILTER]` prints **one bidirectional flow per line**, with
+aligned columns for UTC start date/time, duration (`HH:MM:SS.mmm`), protocol,
+left/right endpoints, total packets and total wire bytes. This makes
+`crepe flows traffic.pcap | head` show complete rows. Long IPv6 addresses and
+large exact counters expand their columns instead of being truncated. Narrow
+terminals may visually wrap long lines; use `less -S` to scroll horizontally.
+Crepe does not insert newlines into a default flow row.
+
+The `<->` arrow means both directions are counted together. Packet and byte
+columns sum both directional counters without rounding or integer overflow.
+The table resembles nfdump's layout but is not a claim of identical record
+semantics: nfdump commonly emits separate directional flows. Crepe duration
+covers the bidirectional record; byte counts include link headers. Full flow IDs,
+per-direction counters, cumulative flags and end reasons are available through
+`--details` or the unchanged JSON/CSV formats.
+
+```sh
+crepe flows traffic.pcap 'port 80'
+crepe flows traffic.pcap --details
+crepe flows traffic.pcap --format json
+```
+
+### Expanded flow details
+
+
+`crepe flows FILE [FILTER] --details` prints expanded blocks instead of the
+default one-record-per-line table. Lines wrap at 80 columns without truncating addresses or counters,
 including when piped. For a known synthetic TCP conversation:
 
 ```text
@@ -159,8 +184,9 @@ is printed when non-default. IDs such as `CX-...` are local flow-record IDs;
 use the persisted conversation `flow_id` returned by historical queries for
 `crepe trace`.
 
-One human flow uses several lines, so `head` may cut a block in half. For
-one-record-per-line processing, use `--format json`; CSV is also unchanged.
+With `--details`, one flow uses several lines, so `head` may cut a block in half.
+The default table has one row per flow; JSON Lines and CSV are also unchanged.
+`--details` only changes the human table format, not JSON/CSV output.
 A filter such as `port 443` covers both directions. nfdump's extra event/NAT
 columns have no direct equivalent in this packet-derived flow summary; absent
 NAT/event fields are not evidence of packet loss.
@@ -188,7 +214,7 @@ See [the tool comparison](COMPARISON.md) for Zeek/SiLK and
 
 The user-facing executable is **`crepe`**. Cargo is Rust's build manager and is
 needed only for a source build or update. Ready-made binaries are available in
-[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.1); Getting started
+[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.2); Getting started
 covers both binary and source installation.
 Run the following examples from the cloned repository root, where `example.pcap`
 and `fixtures/` are supplied synthetic test data:

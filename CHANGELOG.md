@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.2.2 — 2026-10-05
+
+- Correct the default flow presentation to one aligned row per bidirectional flow,
+  with UTC start, clock-style duration, endpoints and exact total counters.
+- Keep expanded directional flags/state/end reasons behind `flows --details`.
+  Packet (`read`) output and flow JSON/CSV remain unchanged.
+- Document differences between Crepe bidirectional records and nfdump's common
+  directional records; do not silently change flow accounting to match a layout.
+
 ## 1.2.1 — 2026-10-05
 
 - Replace the wide flow table with 80-column wrapped summaries: UTC date/time,

@@ -2,7 +2,7 @@
 
 Linux-first network research and analysis in Rust, developed and tested on macOS.
 Version 1.2 adds tcpdump filters, readable packet summaries and the `chocolate` recipe spelling.
-Version 1.2.1 also makes flow summaries compact and explains each direction. See the [platform release gates](docs/RELEASE-1.1.md)
+Version 1.2.2 shows one flow per table row; `flows --details` adds expanded counters and state. See the [platform release gates](docs/RELEASE-1.1.md)
 and [design choices and limits](docs/DESIGN-STATUS.md).
 
 A modular Cargo workspace covering capture, packet filters, bounded IP/TCP
@@ -14,7 +14,7 @@ windows, compressed/partitioned history, crash recovery and native Linux packagi
 
 **New user? Start with [preparation and installation](docs/GETTING-STARTED.md).**
 It covers macOS/Linux prerequisites, installation, your first capture, permissions
-and troubleshooting. [Download v1.2.1](https://github.com/cnc24/crepe/releases/tag/v1.2.1)
+and troubleshooting. [Download v1.2.2](https://github.com/cnc24/crepe/releases/tag/v1.2.2)
 for Apple Silicon macOS or Linux x86-64; ready-made binaries need no Rust/Cargo.
 
 **[User manual: commands, profiles and troubleshooting](docs/OPERATIONS.md)**

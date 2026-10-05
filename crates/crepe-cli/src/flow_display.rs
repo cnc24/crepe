@@ -27,6 +27,54 @@ fn duration(start: &str, end: &str) -> String {
         None => "unknown".into(),
     }
 }
+pub(crate) fn header() -> String {
+    format!(
+        "{:<24} {:>12} {:<5} {:<22} <-> {:<22} {:>8} {:>12}",
+        "START (UTC)",
+        "DURATION",
+        "PROTO",
+        "LEFT ENDPOINT",
+        "RIGHT ENDPOINT",
+        "PACKETS",
+        "WIRE BYTES"
+    )
+}
+
+fn clock_duration(start: &str, end: &str) -> String {
+    let delta = start
+        .parse::<i128>()
+        .ok()
+        .zip(end.parse::<i128>().ok())
+        .and_then(|(s, e)| e.checked_sub(s))
+        .filter(|n| *n >= 0);
+    match delta {
+        Some(ns) => {
+            let seconds = ns / 1_000_000_000;
+            format!(
+                "{:02}:{:02}:{:02}.{:03}",
+                seconds / 3600,
+                seconds / 60 % 60,
+                seconds % 60,
+                ns % 1_000_000_000 / 1_000_000
+            )
+        }
+        None => "unknown".into(),
+    }
+}
+/// One record per physical line; preserve full IPv6 addresses and exact counters.
+pub(crate) fn row(f: &FlowRecord) -> String {
+    format!(
+        "{:<24} {:>12} {:<5} {:<22} <-> {:<22} {:>8} {:>12}",
+        timestamp(&f.start_ns),
+        clock_duration(&f.start_ns, &f.end_ns),
+        f.proto.to_string().to_uppercase(),
+        endpoint(&f.a),
+        endpoint(&f.b),
+        u128::from(f.packets_a) + u128::from(f.packets_b),
+        u128::from(f.bytes_a) + u128::from(f.bytes_b)
+    )
+}
+
 /// Word-wrap at 80 columns, including when stdout is piped; never truncate addresses.
 fn wrap(line: &str) -> String {
     let mut result = String::new();

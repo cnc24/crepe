@@ -55,3 +55,11 @@ addresses, maximum counters, directional flags/bytes and file-end versus TCP
 close. The CLI suite also retains JSON/CSV flow-counter checks. Formatting,
 strict all-feature Clippy, CLI tests with and without optional features, release
 build and the 43-check external-tool comparison are rerun for this patch.
+
+## 1.2.2 table correction
+
+Default flow output is one record per line, with aligned headers and exact
+bidirectional totals. The 1.2.1 expanded view is available through `--details`.
+Tests cover row count, duration, totals, full IPv6 endpoints, and unchanged
+JSON/CSV with or without `--details`; the existing detail-view tests remain.
+Packet output and aggregation semantics are unchanged.

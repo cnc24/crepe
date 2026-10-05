@@ -13,10 +13,11 @@ impl<W: Write> Output<W> {
         Self { writer, format }
     }
     pub fn header(&mut self, flows: bool) -> Result<()> {
+        let flow_header = crate::flow_display::header();
         let text = match (self.format, flows) {
             (Format::Json, _) => return Ok(()),
             (Format::Table, false) => "TIME (UTC)          SOURCE > DESTINATION: PROTOCOL DETAILS (absolute TCP seq/ack)",
-            (Format::Table, true) => "FLOWS (UTC) | -> left to right, <- right to left | bytes include link headers",
+            (Format::Table, true) => &flow_header,
             (Format::Csv, false) => "sequence,timestamp_ns,src_ip,src_port,dst_ip,dst_port,proto,captured_len,original_len,section,interface,vlans,tcp_flags",
             (Format::Csv, true) => "flow_id,start_ns,end_ns,a_ip,a_port,b_ip,b_port,proto,packets_a,packets_b,bytes_a,bytes_b,tcp_flags_a,tcp_flags_b,section,interface,vlans,end_reason",
         };
@@ -63,15 +64,22 @@ impl<W: Write> Output<W> {
             .map_err(output_error),
         }
     }
-    pub fn flow(&mut self, f: &FlowRecord) -> Result<()> {
+    pub fn flow(&mut self, f: &FlowRecord, details: bool) -> Result<()> {
         let reason =
             serde_json::to_value(f.end_reason).map_err(|e| Error::new("CREPE-IO-002", e))?;
         let reason = reason.as_str().unwrap_or("unknown");
         match self.format {
             Format::Json => self.json(f),
-            Format::Table => {
-                writeln!(self.writer, "{}", crate::flow_display::summary(f)).map_err(output_error)
-            }
+            Format::Table => writeln!(
+                self.writer,
+                "{}",
+                if details {
+                    crate::flow_display::summary(f)
+                } else {
+                    crate::flow_display::row(f)
+                }
+            )
+            .map_err(output_error),
             Format::Csv => writeln!(
                 self.writer,
                 "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",

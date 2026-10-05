@@ -64,6 +64,9 @@ pub(crate) enum Command {
         format: Format,
         #[arg(long, default_value_t = 65536, value_parser = clap::value_parser!(u32).range(1..=1_000_000))]
         max_flows: u32,
+        /// Show expanded directional counters, flags and end reasons instead of one row per flow.
+        #[arg(long)]
+        details: bool,
         #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..))]
         tcp_idle: u64,
         #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..))]
