@@ -70,8 +70,8 @@ Local macOS verification after reconciling the original design:
 - `cargo test --workspace --locked`
 - `cargo build --release --all-features --locked`
 - `python3 scripts/check-architecture.py`
-- `python3 scripts/smoke-recipes.py`: bare Choclate in a pseudo-terminal,
-  real loopback DNS/flow capture through Choclate and UDP NetFlow through Banane.
+- `python3 scripts/smoke-recipes.py`: bare Chocolate in a pseudo-terminal,
+  real loopback DNS/flow capture through Chocolate and UDP NetFlow through Banane.
 - `python3 scripts/smoke-platform.py`: v5/v9/IPFIX, persistence/query/trace,
   actual local HTTP/SSH/TLS traffic.
 

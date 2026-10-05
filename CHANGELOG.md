@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 1.2.0 — 2026-10-05
+
+- Correct the canonical recipe name to `chocolate`; retain `choclate` as a CLI,
+  profile-option and configuration alias.
+- Accept tcpdump/libpcap BPF filters in `read`, `flows` and `capture`, with explicit
+  grammar selection and unchanged CQL support. Official binaries include BPF;
+  portable builds without `live` explain how to enable it.
+- Show UTC time, packet direction, TCP flags/absolute seq/ack/window/options,
+  payload/frame lengths, ICMP descriptions and UDP DNS summaries in packet view.
+  JSON/CSV packet schemas remain unchanged.
+- Add command/filter documentation and reproducible tcpdump/nfdump/nfpcapd checks.
+
+## 1.1.0 — follow-up documentation and usability
 
 - Explain each interactive analysis recipe before source selection, with optional
   French/culinary flair and a factual `--serious` presentation.
@@ -8,9 +20,8 @@
 - Add a complete end-user setup guide for macOS, Ubuntu/Debian and Fedora,
   including prerequisites, installation, capture permissions and troubleshooting.
 
-- Rename the deep-analysis recipe and profile to `choclate`, including CLI,
-  configuration values, examples and documentation. Update existing profile
-  configurations to use `profile = "choclate"`.
+- Rename the deep-analysis recipe and profile to `choclate` (corrected to
+  `chocolate` in 1.2.0), including CLI, configuration and documentation.
 
 ## 1.1.0 — initial source-available candidate
 

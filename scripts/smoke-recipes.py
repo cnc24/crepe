@@ -33,7 +33,7 @@ def finish(proc):
 with tempfile.TemporaryDirectory(prefix='crepe-recipe-smoke-') as directory:
     directory = Path(directory)
     # Bare recipes explain their purpose before prompting, without polluting JSON data.
-    for recipe in ['choclate', 'suzette', 'maison', 'complete']:
+    for recipe in ['chocolate', 'suzette', 'maison', 'complete']:
         for serious in [False, True]:
             master, slave = pty.openpty()
             command = [binary, recipe] + (['--serious'] if serious else [])
@@ -55,7 +55,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-recipe-smoke-') as directory:
                     proc.communicate()
     print('PASS: bare recipe descriptions, flair/serious menus and clean JSON TLS observations.')
 
-    # Real local DNS datagram through live Choclate, including custom DNS port.
+    # Real local DNS datagram through live Chocolate, including custom DNS port.
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as server:
         server.bind(('127.0.0.1', 0))
         server.settimeout(3)
@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-recipe-smoke-') as directory:
         config = directory / 'config.toml'
         config.write_text(f'dns_port = {port}\n')
         interface = 'lo0' if os.uname().sysname == 'Darwin' else 'lo'
-        proc = subprocess.Popen([binary, 'choclate', '-i', interface, '--duration', '2',
+        proc = subprocess.Popen([binary, 'chocolate', '-i', interface, '--duration', '2',
                                  '--config', str(config), '--store', str(directory / 'history')],
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         try:
@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-recipe-smoke-') as directory:
             if proc.poll() is None:
                 proc.kill()
                 proc.communicate()
-    print('PASS: crepe choclate live loopback -> DNS + flows + persistent history.')
+    print('PASS: crepe chocolate live loopback -> DNS + flows + persistent history.')
 
     proc = subprocess.Popen([binary, 'banane', '--listen', 'udp://127.0.0.1:0',
                              '--count', '1', '--duration', '5'],
@@ -139,7 +139,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-recipe-smoke-') as directory:
     print('PASS: combined live packets + NetFlow + malformed export -> one durable store.')
 
 
-    proc = subprocess.Popen([binary, 'choclate', '-i', interface, '--duration', '3',
+    proc = subprocess.Popen([binary, 'chocolate', '-i', interface, '--duration', '3',
                              '--workers', '2', '--config', str(config), '--query', '* | group event.type | count', '--query-interval', '1'],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:

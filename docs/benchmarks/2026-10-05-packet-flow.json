@@ -1,0 +1,75 @@
+{
+  "versions": {
+    "crepe": "crepe 1.2.0",
+    "tcpdump": "tcpdump version 4.99.1 -- Apple version 161\nlibpcap version 1.10.1\nLibreSSL 3.3.6",
+    "nfpcapd": "../../work/nfdump-install/bin/nfpcapd: Version: 1.7.10-release options: LZ4 ZSTD BZIP2 date: Mon Sep 7 17:39:23 CEST 2026",
+    "nfdump": "/opt/homebrew/bin/nfdump: Version: 1.7.10-release options: lz4 BZIP2 read-pcap date: Mon Sep 7 17:39:23 CEST 2026"
+  },
+  "host": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "dataset": {
+    "conversations": 1000,
+    "packets": 20000,
+    "sha256": "adeaf32cfd7459cfc68ff7bc9828aa6afdf48db476003f4fb76746e1887029a5"
+  },
+  "checks": {
+    "filter-0-0": true,
+    "filter-0-1": true,
+    "filter-0-2": true,
+    "filter-0-3": true,
+    "filter-0-4": true,
+    "filter-0-5": true,
+    "filter-0-6": true,
+    "filter-0-7": true,
+    "filter-1-0": true,
+    "filter-1-1": true,
+    "filter-1-2": true,
+    "filter-1-3": true,
+    "filter-1-4": true,
+    "filter-1-5": true,
+    "filter-1-6": true,
+    "filter-1-7": true,
+    "filter-2-0": true,
+    "filter-2-1": true,
+    "filter-2-2": true,
+    "filter-2-3": true,
+    "filter-2-4": true,
+    "filter-2-5": true,
+    "filter-2-6": true,
+    "filter-2-7": true,
+    "filter-3-0": true,
+    "filter-3-1": true,
+    "filter-3-2": true,
+    "filter-3-3": true,
+    "filter-3-4": true,
+    "filter-3-5": true,
+    "filter-3-6": true,
+    "filter-3-7": true,
+    "summary_syn_ack_fin_reset": true,
+    "summary_utc_time": true,
+    "dns_question": true,
+    "fixture-directional-packets-ipbytes": true,
+    "fixture-flow-filter-0": true,
+    "fixture-flow-filter-1": true,
+    "fixture-flow-filter-2": true,
+    "generated-directional-packets-ipbytes": true,
+    "generated-flow-filter-0": true,
+    "generated-flow-filter-1": true,
+    "generated-flow-filter-2": true
+  },
+  "flow_summary": {
+    "fixture": {
+      "crepe_rows": 3,
+      "nfdump_rows": 5,
+      "packets": 8,
+      "ip_bytes": 296
+    },
+    "generated": {
+      "crepe_rows": 1000,
+      "nfdump_rows": 2000,
+      "packets": 20000,
+      "ip_bytes": 880000
+    }
+  },
+  "method": "Functional checks, not timings. Compare direction-normalized TCP/UDP packets and IP bytes (Crepe frame bytes minus 14 Ethernet bytes per packet). Filtered tcpdump exports are decoded to compare the complete selected packet records, except renumbered sequence. Only the listed synthetic datasets and filters were tested; no universal equivalence or production-rate claim."
+}

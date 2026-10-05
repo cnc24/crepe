@@ -23,7 +23,7 @@ Tests may depend on fixture/capture helpers without introducing production cycle
 | crepe-collector | NetFlow/IPFIX datagrams, templates, exporter sessions | core |
 | crepe-storage | Arrow/Parquet transactions, identity hashing, historical CQL/DataFusion | core |
 | crepe-engine | Configuration, observations, policy notices, import orchestration | core, capture, packet, flow, analysis, collector, storage, security, plugin (optional) |
-| crepe-cli | Arguments, IO, signal handling and operational commands | core, capture, packet, query, flow, analysis, collector, storage, engine |
+| crepe-cli | Arguments, IO, packet presentation, signal handling and operational commands | core, capture, packet, query, flow, dns, analysis, collector, storage, engine |
 
 Core has no capture, database, CLI or runtime dependency. Packet views borrow
 input bytes. IP/TCP reconstruction owns only bounded queues; analysis emits

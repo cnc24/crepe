@@ -18,6 +18,8 @@ pub struct PacketView<'a> {
     pub event: PacketEvent,
     pub payload: &'a [u8],
     pub tcp_sequence: Option<u32>,
+    /// Borrowed TCP header, including options, for packet presentation.
+    pub tcp_header: Option<&'a [u8]>,
 }
 
 pub fn decode_view(data: &[u8], header: EventHeader, link: u32) -> Result<Option<PacketView<'_>>> {
@@ -63,11 +65,13 @@ pub fn decode_view(data: &[u8], header: EventHeader, link: u32) -> Result<Option
     };
     let mut transport_payload = &[][..];
     let mut tcp_sequence = None;
+    let mut tcp_header = None;
     if !event.fragmented {
         match packet.transport {
             Some(TransportSlice::Tcp(t)) => {
                 transport_payload = t.payload();
                 tcp_sequence = Some(t.sequence_number());
+                tcp_header = Some(&t.slice()[..usize::from(t.data_offset()) * 4]);
                 event.tcp_flags = Some(t.slice()[13]);
                 event.src.port = Some(t.source_port());
                 event.dst.port = Some(t.destination_port());
@@ -92,6 +96,7 @@ pub fn decode_view(data: &[u8], header: EventHeader, link: u32) -> Result<Option
         event,
         payload: transport_payload,
         tcp_sequence,
+        tcp_header,
     }))
 }
 

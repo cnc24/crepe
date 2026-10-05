@@ -119,9 +119,9 @@ zeek -r capture.pcap LogAscii::use_json=T
 Both take one command. Zeek's `dns.log`, `http.log`, `ssl.log` and `ssh.log` are
 usefully separated by protocol; Crepe emits a shared event stream. **There is no
 clear command-count advantage for Crepe on this task.** Crepe's interactive
-`crepe choclate` adds an explanation and source menu for users who do not already
+`crepe chocolate` adds an explanation and source menu for users who do not already
 know which input parameter to supply. The timed protocol comparison uses
-`analyze`, not `choclate`, which follows a different ingestion/output path.
+`analyze`, not `chocolate`, which follows a different ingestion/output path.
 
 ### Extract conversations and counters
 
@@ -239,3 +239,7 @@ for an intuition/ease-of-use advantage. Rust is not itself evidence of superiori
 References: [Zeek overview](https://docs.zeek.org/en/current/about/what.html),
 [SiLK overview](https://tools.netsa.cert.org/silk/silk.html),
 [SiLK PDU format](https://tools.netsa.cert.org/silk/rwpdu2silk.html).
+
+For the newer tcpdump/nfdump/nfpcapd functional comparison, see
+[Packet and flow tools](PACKET-FLOW-COMPARISON.md). The measurements above
+remain the original 1.1.0 results.

@@ -23,7 +23,7 @@ allowed = {
     'crepe-storage': {'crepe-core'},
     'crepe-engine': {'crepe-plugin', 'crepe-security', 'crepe-core', 'crepe-capture', 'crepe-packet', 'crepe-flow', 'crepe-analysis', 'crepe-storage', 'crepe-collector'},
     'crepe-analysis': {'crepe-files', 'crepe-core', 'crepe-packet', 'crepe-stream', 'crepe-dns', 'crepe-flow', 'crepe-protocol', 'crepe-fragment'},
-    'crepe-cli': {'crepe-core', 'crepe-packet', 'crepe-capture', 'crepe-query', 'crepe-flow', 'crepe-analysis', 'crepe-engine', 'crepe-storage', 'crepe-collector'},
+    'crepe-cli': {'crepe-dns', 'crepe-core', 'crepe-packet', 'crepe-capture', 'crepe-query', 'crepe-flow', 'crepe-analysis', 'crepe-engine', 'crepe-storage', 'crepe-collector'},
 }
 packages = {p['name']: p for p in metadata['packages'] if p['id'] in metadata['workspace_members']}
 assert packages.keys() == allowed.keys(), 'Update the architecture contract deliberately when adding/removing a crate'

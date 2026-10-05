@@ -875,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-analysis"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-capture",
  "crepe-core",
@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-capture"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
  "crepe-packet",
@@ -901,13 +901,14 @@ dependencies = [
 
 [[package]]
 name = "crepe-cli"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "clap",
  "crepe-analysis",
  "crepe-capture",
  "crepe-collector",
  "crepe-core",
+ "crepe-dns",
  "crepe-engine",
  "crepe-flow",
  "crepe-packet",
@@ -922,7 +923,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-collector"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
  "serde",
@@ -930,14 +931,14 @@ dependencies = [
 
 [[package]]
 name = "crepe-core"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "crepe-dns"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
  "serde",
@@ -945,7 +946,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-engine"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-analysis",
  "crepe-capture",
@@ -963,7 +964,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-files"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
  "httparse",
@@ -972,7 +973,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-flow"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-capture",
  "crepe-core",
@@ -981,14 +982,14 @@ dependencies = [
 
 [[package]]
 name = "crepe-fragment"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
 ]
 
 [[package]]
 name = "crepe-packet"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
  "etherparse",
@@ -996,7 +997,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-plugin"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
  "serde",
@@ -1006,7 +1007,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-protocol"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
  "httparse",
@@ -1015,7 +1016,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-query"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-capture",
  "crepe-core",
@@ -1027,7 +1028,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-security"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
  "ipnet",
@@ -1037,7 +1038,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-storage"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "blake3",
  "crepe-core",
@@ -1052,7 +1053,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-stream"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "crepe-core",
 ]

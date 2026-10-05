@@ -1,7 +1,7 @@
 # Crepe
 
 Linux-first network research and analysis in Rust, developed and tested on macOS.
-The 1.1 release candidate implements the core full-platform roadmap. See the [release gates](docs/RELEASE-1.1.md)
+Version 1.2 adds tcpdump filters, readable packet summaries and the `chocolate` recipe spelling. See the [platform release gates](docs/RELEASE-1.1.md)
 and [design choices and limits](docs/DESIGN-STATUS.md).
 
 A modular Cargo workspace covering capture, packet filters, bounded IP/TCP
@@ -13,7 +13,7 @@ windows, compressed/partitioned history, crash recovery and native Linux packagi
 
 **New user? Start with [preparation and installation](docs/GETTING-STARTED.md).**
 It covers macOS/Linux prerequisites, installation, your first capture, permissions
-and troubleshooting. [Download v1.1.0](https://github.com/cnc24/crepe/releases/tag/v1.1.0)
+and troubleshooting. [Download v1.2.0](https://github.com/cnc24/crepe/releases/tag/v1.2.0)
 for Apple Silicon macOS or Linux x86-64; ready-made binaries need no Rust/Cargo.
 
 **[User manual: commands, profiles and troubleshooting](docs/OPERATIONS.md)**
@@ -21,10 +21,10 @@ for Apple Silicon macOS or Linux x86-64; ready-made binaries need no Rust/Cargo.
 After installing, run these examples from the cloned repository directory:
 
 ```sh
-crepe read example.pcap 'dst.port == 443'
+crepe read example.pcap 'dst port 443'
 crepe analyze fixtures/protocols.pcap
 crepe profiles
-crepe choclate fixtures/protocols.pcap
+crepe chocolate fixtures/protocols.pcap
 crepe suzette fixtures/dns.pcap --store ./case
 crepe ingest fixtures/dns.pcap --store ./history --sensor lab
 crepe query ./history 'event.type == flow.end | group proto | sort bytes desc'
@@ -33,7 +33,7 @@ crepe collect --listen 127.0.0.1:2055 --duration 30 --store ./history
 
 Default builds support offline analysis, storage and UDP flow collection.
 `--all-features` additionally enables live libpcap capture (`capture`, alias
-`sucre`), `interfaces` and sandboxed WASM components. Install `libpcap-dev` on Linux for live builds;
+`sucre`), offline tcpdump/BPF filters, `interfaces` and sandboxed WASM components. Install `libpcap-dev` on Linux for live builds;
 macOS provides libpcap. Live capture needs OS capture permissions.
 Rust 1.96+ is required by the current component runtime. CLI errors have stable codes and a
 little French humor: *Sacré bleu!* JSON, tables and CSV are supported for
@@ -42,9 +42,11 @@ packet/flow/application output; historical queries use JSON Lines.
 - [Operations, profiles, limits and recovery](docs/OPERATIONS.md)
 - [Schema, IDs and historical CQL](docs/SCHEMA.md)
 - [Project architecture](docs/ARCHITECTURE.md)
-- [Current release acceptance](docs/RELEASE-1.1.md)
+- [Current release validation](docs/RELEASE-1.2.md)
+- [Platform release acceptance](docs/RELEASE-1.1.md)
 - [Validation record](docs/VALIDATION.md)
 - [Measured comparison with Zeek/SiLK and command examples](docs/COMPARISON.md)
+- [Tested tcpdump/nfpcapd/nfdump workflows and filters](docs/PACKET-FLOW-COMPARISON.md)
 
 This is a passive research platform. TLS analysis reads cleartext handshake
 metadata; HTTP/SSH support covers initial headers/banners. It does not decrypt

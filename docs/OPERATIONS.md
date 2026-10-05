@@ -3,11 +3,157 @@
 New users: follow [Getting started](GETTING-STARTED.md) for OS preparation,
 installation, PATH setup, capture permissions and a first working example.
 
+## Command and filter quick reference
+
+Examples below use the included synthetic captures. For a real capture replace
+`example.pcap` with your file. Put filters in single quotes so the shell does not
+interpret parentheses, `!`, `&` or `|`. `[]` below means optional arguments.
+Every command supports `--help`.
+
+| Command | What it does / common options |
+| --- | --- |
+| `read FILE [FILTER]` | Packet summaries; `--format table\|json\|csv`, `--limit N`, `--write FILE`, `--tolerant`, `--filter-syntax auto\|cql\|bpf` |
+| `capture -i IFACE [FILTER]` / `sucre` | Live packet summaries; read options plus `--duration SECONDS`, `--count N`, `--bpf FILTER`, `--promisc` |
+| `interfaces` | List available capture interfaces |
+| `flows FILE [FILTER]` | Bidirectional TCP/UDP counters; `--format`, `--filter-syntax`, `--max-flows`, `--tcp-idle`, `--udp-idle`, `--active-timeout` |
+| `analyze FILE` | Reassembly and application observations; `--format table\|json\|csv`, `--dns-port`, `--max-streams`, `--max-buffer-bytes`, `--stream-idle` |
+| `chocolate [FILE]` | Deep-analysis recipe; without a source, opens the interactive menu |
+| `suzette [FILE]` | Forensic-analysis recipe |
+| `maison [FILE] --config FILE` | Analysis using your own configuration |
+| `complete [FILE]` | All implemented observation modules |
+| `profiles` | List recipes and descriptions |
+| `ingest FILE --store DIR` | Import into persistent history; `--profile`, `--sensor`, `--config` |
+| `query DIR [CQL]` | Query stored observations; default `*`, JSON Lines output |
+| `trace DIR FLOW_ID` | Stored observations for a conversation |
+| `timeline DIR --limit N` | Chronological stored observations |
+| `collect` / `banane` | Receive NetFlow v5/v9/IPFIX; `--listen IP:PORT`, `--duration SECONDS`, `--count N`, `--store DIR`, `--sensor NAME` |
+| `config [FILE]` | Validate and show effective configuration |
+| `daemon --config FILE` | Configured live sensor; optional `--duration SECONDS` |
+| `compact DIR --output NEW_DIR` | Copy/compact a stopped history store; optional `--since-ms UNIX_MS` |
+
+The four analysis recipes share `-i IFACE` (instead of FILE), `--duration`,
+`--store`, `--config`, `--enable MODULE`, `--disable MODULE`, `--tolerant` and
+`--workers 1..16`. Live recipes additionally accept `--listen IP:PORT`,
+`--query CQL` and `--query-interval SECONDS`. Recipe output is observation JSON
+Lines, not the packet summary; use `read`/`capture` for the packet view.
+`choclate` remains a compatibility alias; use **`chocolate`** in new commands and
+`profile = "chocolate"` in configurations.
+
+Global options: `--serious` removes humorous diagnostics, `--log-format json`
+changes diagnostics on stderr, `--metrics IP:PORT` enables the metrics endpoint,
+`--version` shows the installed version. `--format json` controls data on stdout
+and is independent of `--log-format`. Formats are not interchangeable schemas:
+packet records, flow records and historical observations have different fields.
+
+### Packet filters: tcpdump/BPF or CQL
+
+`read`, `capture`/`sucre` and `flows` accept either grammar in the same positional
+argument. Official release binaries include libpcap support. A portable source
+build without the `live` feature supports CQL only; build with `--features live`
+or `--all-features` for BPF. Reading a file does not require capture privileges.
+
+| Task | tcpdump/BPF | Crepe packet CQL |
+| --- | --- | --- |
+| Destination HTTPS port | `dst port 443` | `dst.port == 443` |
+| TCP only | `tcp` | `proto == tcp` |
+| UDP DNS | `udp and port 53` | `proto == udp && (src.port == 53 || dst.port == 53)` |
+| Source address | `src host 192.0.2.10` | `src.ip == 192.0.2.10` |
+| Source subnet | `src net 192.0.2.0/24` | `src.ip in 192.0.2.0/24` |
+| Two destination ports | `dst port 80 or dst port 443` | `dst.port in [80,443]` |
+| Exclude DNS destination | `not dst port 53` | `dst.port != 53` |
+| TCP SYN bit | `tcp[tcpflags] & tcp-syn != 0` | Not available in packet CQL |
+
+```sh
+crepe read example.pcap 'dst port 443'
+crepe read fixtures/dns.pcap 'udp and port 53'
+crepe read example.pcap 'dst.port == 443' --format json
+crepe read example.pcap 'tcp[tcpflags] & tcp-syn != 0' --filter-syntax bpf
+crepe flows fixtures/flows.pcap 'tcp' --format csv
+crepe capture -i lo0 'udp port 53' --duration 10
+# Linux loopback is usually lo; list interfaces before choosing one.
+```
+
+Auto mode recognizes CQL's dotted endpoint fields and `proto ==` / `proto !=`;
+other expressions go to libpcap. Use `--filter-syntax cql` or `bpf` to force a
+grammar when needed. This is Crepe CQL, **not full Wireshark display-filter
+syntax**. Packet CQL fields are exactly `src.ip`, `dst.ip`, `src.port`,
+`dst.port`, `proto`; operators are `==`, `!=`, `&&`, `||`, `!`, parentheses,
+IP `in CIDR` and port `in [N,...]`. Protocols: `tcp`, `udp`, `icmp`, `icmpv6`
+or a numeric IP protocol. No payload strings or history pipelines here.
+
+BPF uses the actual libpcap compiler, including its `host`, `net`, `port`,
+`portrange`, protocol, boolean and packet-byte expressions. Consult
+[pcap-filter(7)](https://www.tcpdump.org/manpages/pcap-filter.7.html) for grammar
+and link-layer/IPv6 qualifications. Names in BPF expressions may be resolved by
+libpcap; use numeric addresses for reproducibility. Packet output itself never
+performs reverse DNS or service-name lookups.
+
+Limits: BPF filters are bounded to 4096 bytes and validated for Ethernet first,
+then compiled for each encountered supported linktype. Ethernet-only expressions
+can fail on raw-IP/loopback inputs. This version explicitly rejects snaplen-truncated
+frames with `CREPE-CAP-005` on the userspace BPF path: the safe binding cannot
+preserve the original wire length for `len`/`greater`/`less`. Capture full frames,
+or use CQL with `--tolerant` to skip malformed packet payloads. `read` still
+emits only supported IP packets: an ARP filter does not make it an ARP decoder.
+BPF port filters and CQL differ for fragments, VLANs and IPv6 extension headers;
+BPF follows libpcap's semantics. Do not assume every superficially equivalent
+expression selects every edge case identically.
+
+`flows` filters packets **before** aggregation: `dst port 443` excludes reverse
+packets, so counters cover only that direction. Use `port 443` for both directions.
+The positional capture filter runs in userspace; `--bpf` is a separate kernel
+prefilter and intersects it. CQL may supply a conservative automatic prefilter.
+`--count` counts delivered records before the userspace filter; `--limit` counts
+matching printed packets.
+
+### Reading the packet summary
+
+```text
+22:13:20.123456000Z IP 192.0.2.10:50000 > 198.51.100.20:443: TCP Flags [S], seq 1, win 65535, length 0, wire 54 bytes
+22:13:20.123456000Z IP 192.0.2.10:53000 > 198.51.100.20:53: UDP, length 30, DNS query id 4660 rcode 0 A "example.test.", wire 72 bytes
+```
+
+Time is UTC (`Z`), to nanoseconds, with the date omitted like tcpdump's default.
+The digits reflect capture precision; they do not imply nanosecond accuracy.
+Untimed PCAPNG packets say `time unknown`. The arrow points from sender to
+receiver. IPv6 endpoints use brackets. TCP `seq`/`ack` are **absolute** numbers
+(compare with `tcpdump -nn -S`); `win` is the raw, unscaled advertised window.
+Flags: `S` SYN, `F` FIN, `R` RST, `P` PSH, `.` ACK, `U` URG, `E` ECE, `W` CWR.
+TCP options include MSS, window scale, SACK and timestamps when present.
+`length` is captured TCP/UDP payload bytes; `wire` is the original frame length,
+including its link header. Fragments are labelled without invented transport
+fields. ICMP shows type, code and common message names.
+
+The compact DNS summary covers UDP port 53 (question/type, ID, response code and
+answer count). TCP DNS, full resource records, HTTP and TLS details belong to
+`analyze`/`chocolate`; the packet view does not run stream reassembly or print
+HTTP bodies. JSON/CSV packet schemas and lossless Unix-nanosecond timestamps
+are unchanged for scripts.
+
+### Historical and live analysis queries
+
+`query STORE '...'` and a live recipe's `--query '...'` use **historical CQL**,
+not BPF or nfdump's filter language. For example:
+
+```sh
+crepe query ./case 'dst.port == 443 | count'
+crepe query ./case 'event.type == dns.query | select timestamp,dns.qname,src.ip'
+crepe query ./case 'event.type == flow.end | group proto | sort bytes desc'
+crepe chocolate -i lo0 --query 'event.type == flow.end | sum bytes as total' --query-interval 5
+```
+
+See [SCHEMA.md: Historical CQL](SCHEMA.md#historical-cql) and
+[additional operators](SCHEMA.md#additional-historical-query-operators) for all
+fields, comparisons, string operators, time expressions and pipeline stages.
+See [the tool comparison](COMPARISON.md) for Zeek/SiLK and
+[the packet/flow comparison](PACKET-FLOW-COMPARISON.md) for tcpdump/nfdump/nfpcapd.
+
+
 ## Using Crepe locally
 
 The user-facing executable is **`crepe`**. Cargo is Rust's build manager and is
 needed only for a source build or update. Ready-made binaries are available in
-[Releases](https://github.com/cnc24/crepe/releases/tag/v1.1.0); Getting started
+[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.0); Getting started
 covers both binary and source installation.
 Run the following examples from the cloned repository root, where `example.pcap`
 and `fixtures/` are supplied synthetic test data:
@@ -19,7 +165,7 @@ crepe read example.pcap 'proto == tcp' --format json
 crepe flows fixtures/flows.pcap
 crepe analyze fixtures/protocols.pcap --format table
 crepe profiles
-crepe choclate fixtures/protocols.pcap
+crepe chocolate fixtures/protocols.pcap
 crepe suzette fixtures/protocols.pcap
 
 # Use a fresh store for this demo; identical imports are rejected.
@@ -69,12 +215,12 @@ letters/digits/underscore/hyphen. `config [FILE]` prints effective JSON.
 | --- | --- |
 | `crepe sucre -i INTERFACE` | Live packet capture (alias for `capture`) |
 | `crepe banane --listen udp://127.0.0.1:2055` | NetFlow v5/v9 and IPFIX collector (alias for `collect`) |
-| `crepe choclate -i INTERFACE` | Network analysis: packets, flows, reassembly, DNS/TLS/HTTP/SSH, anomalies and notices |
+| `crepe chocolate -i INTERFACE` | Network analysis: packets, flows, reassembly, DNS/TLS/HTTP/SSH, anomalies and notices |
 | `crepe suzette incident.pcapng --store ./case` | Capture forensics with persistent history for query/trace/timeline |
 | `crepe maison FILE --config config/example.toml` | Use your own sensor, recipe and analysis resource settings |
 | `crepe complete -i INTERFACE` | All implemented packet-derived analysis engines |
 
-Choclate, Suzette, Maison and Complete also accept a capture file directly.
+Chocolate, Suzette, Maison and Complete also accept a capture file directly.
 When they open the interactive source menu, they first explain the selected
 recipe in one sentence, followed by a short culinary aside. `--serious` or
 `flair = false` keeps the explanation and removes the aside. Explicit file or
@@ -102,7 +248,7 @@ add `--listen IP:PORT` to collect UDP exporter records into the same live store.
 
 For scripted imports, `ingest --profile NAME` overrides the TOML profile;
 Banane is a collector and is rejected for PCAP ingestion. `flows` remains the
-flow-only command. An early private prototype profile mapping was incorrect: Choclate
+flow-only command. An early private prototype profile mapping was incorrect: Chocolate
 was flow-only and Banane was DNS-only. Main corrects those meanings to match
 the design. Existing immutable stores remain readable; reprocess captures into
 a new store if the corrected selection is required.
@@ -388,7 +534,7 @@ crepe complete -i lo0 --listen udp://127.0.0.1:2055 --store ./combined --duratio
 crepe query ./combined 'event.type == flow.export | group proto'
 ```
 
-Use the appropriate Linux interface instead of `lo0`. Choclate/Maison/Complete
+Use the appropriate Linux interface instead of `lo0`. Chocolate/Maison/Complete
 accept `--listen`, and daemon configuration accepts `collector_listen =
 "127.0.0.1:2055"`. One event pipeline and writer handles captured packets,
 exporter flows/options/notices, security rules and components. Exported flow
@@ -403,7 +549,7 @@ per packet/timer callback; sustained overload can cause socket drops.
 ## Live query windows
 
 ```sh
-crepe choclate -i lo0 --duration 30 --query 'event.type == packet | group proto | count' --query-interval 5
+crepe chocolate -i lo0 --duration 30 --query 'event.type == packet | group proto | count' --query-interval 5
 crepe complete -i lo0 --listen 127.0.0.1:2055 --store ./history --query 'event.type == flow.export | group src.ip | sum bytes as total'
 ```
 
@@ -434,12 +580,12 @@ traffic and IPv6 extension chains are deliberately admitted broadly. Unsupported
 OR/negation/port-only expressions widen to no hint, never an unsafe exclusion.
 Other link types keep the full userspace filter. Explicit `--bpf` takes precedence;
 a failed automatic BPF compilation falls back to full capture with a diagnostic.
-`--count` counts records delivered after the active BPF prefilter, before CQL.
+`--count` counts records delivered after the active BPF prefilter, before the userspace packet filter.
 
 
 ## Parallel live analysis
 
-`crepe choclate -i lo0 --workers 4` enables 1–16 live workers (`workers` in
+`crepe chocolate -i lo0 --workers 4` enables 1–16 live workers (`workers` in
 TOML; default 1). The global TCP stream/buffer budgets and default flow/IP
 fragment budgets are divided across workers, rather than multiplied. Each
 worker has at most 16 queued owned capture records; the shared result queue

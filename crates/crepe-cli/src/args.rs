@@ -19,10 +19,20 @@ pub(crate) struct Cli {
     #[command(subcommand)]
     pub command: Command,
 }
+#[derive(Clone, Copy, clap::ValueEnum)]
+pub(crate) enum FilterSyntax {
+    Auto,
+    Cql,
+    Bpf,
+}
+
 #[derive(Args)]
 pub(crate) struct PacketArgs {
-    /// CQL predicate, applied before output and export.
+    /// Packet filter: CQL or tcpdump/BPF (requires the live build feature).
     pub filter: Option<String>,
+    /// Select a grammar explicitly, or detect CQL fields automatically.
+    #[arg(long, value_enum, default_value_t = FilterSyntax::Auto)]
+    pub filter_syntax: FilterSyntax,
     /// Skip malformed packet payloads; capture-container and I/O errors still stop.
     #[arg(long)]
     pub tolerant: bool,
@@ -48,6 +58,8 @@ pub(crate) enum Command {
         file: PathBuf,
         /// Packet filter, applied BEFORE aggregation; counters cover selected packets only.
         filter: Option<String>,
+        #[arg(long, value_enum, default_value_t = FilterSyntax::Auto)]
+        filter_syntax: FilterSyntax,
         #[arg(long, value_enum, default_value_t = Format::Table)]
         format: Format,
         #[arg(long, default_value_t = 65536, value_parser = clap::value_parser!(u32).range(1..=1_000_000))]
@@ -74,7 +86,8 @@ pub(crate) enum Command {
         stream_idle: u64,
     },
     /// Deep network analysis: packets, flows, reassembly and application metadata.
-    Choclate(RecipeArgs),
+    #[command(alias = "choclate")]
+    Chocolate(RecipeArgs),
     /// Forensics: analyze a capture and query its historical observations.
     Suzette(RecipeArgs),
     /// Run with your own configuration.
@@ -177,7 +190,8 @@ pub enum Format {
 #[derive(Clone, Copy, ValueEnum)]
 pub(crate) enum Profile {
     Sucre,
-    Choclate,
+    #[value(alias = "choclate")]
+    Chocolate,
     Banane,
     Suzette,
     Maison,
@@ -187,7 +201,7 @@ impl From<Profile> for crepe_engine::Profile {
     fn from(value: Profile) -> Self {
         match value {
             Profile::Sucre => Self::Sucre,
-            Profile::Choclate => Self::Choclate,
+            Profile::Chocolate => Self::Chocolate,
             Profile::Banane => Self::Banane,
             Profile::Suzette => Self::Suzette,
             Profile::Maison => Self::Maison,

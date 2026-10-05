@@ -26,8 +26,8 @@ fn select_source(profile: Profile, args: &mut RecipeArgs) -> Result<()> {
         ));
     }
     let (description, aside) = match profile {
-        Profile::Choclate => (
-            "Choclate: deep network analysis of packets, flows and DNS/TLS/HTTP/SSH metadata.",
+        Profile::Chocolate => (
+            "Chocolate: deep network analysis of packets, flows and DNS/TLS/HTTP/SSH metadata.",
             "Layers of insight, served without decrypting your TLS.",
         ),
         Profile::Suzette => (

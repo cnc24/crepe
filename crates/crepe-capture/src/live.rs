@@ -48,10 +48,10 @@ impl Capture {
                 .map_err(|e| Error::new("CREPE-CAP-005", e))?;
         }
         let dlt = inner.get_datalink();
-        let linktype = if dlt == pcap::Linktype::RAW {
-            101
-        } else {
-            u32::try_from(dlt.0).map_err(error)?
+        let linktype = match dlt.get_name().map_err(error)?.as_str() {
+            "RAW" => 101,
+            "LOOP" => 108,
+            _ => u32::try_from(dlt.0).map_err(error)?,
         };
         supported_link(linktype)?;
         Ok(Self {
@@ -123,5 +123,117 @@ impl EthernetFilter {
     }
     pub fn matches(&self, bytes: &[u8]) -> bool {
         self.0.filter(bytes)
+    }
+}
+
+/// Per-linktype offline BPF programs. Uses the same compiler as tcpdump.
+pub struct PacketFilter {
+    expression: String,
+    programs: std::collections::BTreeMap<u32, pcap::BpfProgram>,
+}
+impl PacketFilter {
+    pub fn new(expression: &str) -> Result<Self> {
+        if expression.len() > 4096 {
+            return Err(Error::new("CREPE-CAP-005", "BPF filter exceeds 4096 bytes"));
+        }
+        let mut result = Self {
+            expression: expression.into(),
+            programs: Default::default(),
+        };
+        // Validate even if the input is empty. Our packet reader supports IP linktypes.
+        result.compile(1)?;
+        Ok(result)
+    }
+    fn compile(&mut self, link: u32) -> Result<()> {
+        supported_link(link)?;
+        // pcap crate constants are file LINKTYPE values, not always native DLTs.
+        // Ask libpcap by name (notably RAW is 101 in files but 12 on Linux/macOS).
+        let name = match link {
+            0 => "NULL",
+            1 => "EN10MB",
+            101 => "RAW",
+            108 => "LOOP",
+            113 => "LINUX_SLL",
+            228 => "IPV4",
+            229 => "IPV6",
+            276 => "LINUX_SLL2",
+            _ => unreachable!("supported_link checked above"),
+        };
+        let dlt = pcap::Linktype::from_name(name).map_err(|e| Error::new("CREPE-CAP-005", e))?;
+        let program = pcap::Capture::dead(dlt)
+            .and_then(|c| c.compile(&self.expression, true))
+            .map_err(|e| {
+                Error::new(
+                    "CREPE-CAP-005",
+                    format!("BPF filter for LINKTYPE {link}: {e}"),
+                )
+            })?;
+        self.programs.insert(link, program);
+        Ok(())
+    }
+    pub fn matches(&mut self, record: &Record<'_>) -> Result<bool> {
+        // pcap 2.x's safe evaluator uses the slice length as both caplen and wirelen.
+        // Never silently give incorrect answers for `len`, `greater` or `less`.
+        if record.header.original_len != record.header.captured_len {
+            return Err(Error::new("CREPE-CAP-005", format!(
+                "record {} is snaplen-truncated; offline BPF requires complete frames in this build (use CQL with --tolerant or capture with a larger snaplen)", record.header.sequence)));
+        }
+        if !self.programs.contains_key(&record.linktype) {
+            self.compile(record.linktype)?;
+        }
+        Ok(self.programs[&record.linktype].filter(record.data))
+    }
+}
+
+#[cfg(test)]
+mod offline_filter_tests {
+    use super::*;
+    #[test]
+    fn bpf_handles_linktypes_and_rejects_truncation_instead_of_wrong_length() {
+        let bytes = include_bytes!("../../../example.pcap");
+        let mut filter = PacketFilter::new("tcp and dst port 443").unwrap();
+        crate::read_records(&bytes[..], |record| {
+            if record.header.sequence != 1 {
+                return Ok(false);
+            }
+            assert!(filter.matches(&record).unwrap());
+            let mut header = record.header.clone();
+            let ip = &record.data[14..];
+            for linktype in [101, 228] {
+                header.captured_len = ip.len() as u32;
+                header.original_len = header.captured_len;
+                assert!(filter
+                    .matches(&Record {
+                        data: ip,
+                        header: header.clone(),
+                        linktype
+                    })
+                    .unwrap());
+            }
+            let mut loopback = 2_u32.to_ne_bytes().to_vec();
+            loopback.extend_from_slice(ip);
+            header.captured_len = loopback.len() as u32;
+            header.original_len = header.captured_len;
+            assert!(filter
+                .matches(&Record {
+                    data: &loopback,
+                    header: header.clone(),
+                    linktype: 0
+                })
+                .unwrap());
+            header.original_len += 100;
+            let error = filter
+                .matches(&Record {
+                    data: &loopback,
+                    header,
+                    linktype: 0,
+                })
+                .unwrap_err();
+            assert_eq!(error.code, "CREPE-CAP-005");
+            assert!(error.message.contains("snaplen-truncated"));
+            Ok(false)
+        })
+        .unwrap();
+        assert!(PacketFilter::new("tcp and (").is_err());
     }
 }

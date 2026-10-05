@@ -340,7 +340,7 @@ fn profile_menu_and_overrides_select_stored_observations() {
     assert!(menu.status.success());
     let menu: serde_json::Value = serde_json::from_slice(&menu.stdout).unwrap();
     assert_eq!(menu["profiles"].as_object().unwrap().len(), 6);
-    for profile in ["sucre", "choclate", "suzette", "maison", "complete"] {
+    for profile in ["sucre", "chocolate", "suzette", "maison", "complete"] {
         let dir = temp_dir();
         let config = dir.join("config.toml");
         std::fs::write(&config, "profile = \"complete\"\n").unwrap();
@@ -400,7 +400,7 @@ fn profile_menu_and_overrides_select_stored_observations() {
 
 #[test]
 fn direct_recipes_match_the_design_and_maison_uses_configuration() {
-    for name in ["choclate", "suzette", "complete"] {
+    for name in ["chocolate", "suzette", "complete"] {
         let output = cli()
             .arg(name)
             .arg(fixture("fixtures/protocols.pcap"))
@@ -445,7 +445,7 @@ fn direct_recipes_match_the_design_and_maison_uses_configuration() {
         assert_eq!(row["event_type"], "packet");
         assert_eq!(row["sensor"], "custom");
     }
-    let output = cli().arg("choclate").output().unwrap();
+    let output = cli().arg("chocolate").output().unwrap();
     assert_eq!(output.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&output.stderr).contains("source menu"));
     let output = cli()
@@ -524,7 +524,7 @@ fn config_layers_and_module_overrides() {
     assert_eq!(config["sensor"], "env");
     assert_eq!(config["max_streams"], 42);
     let result = cli()
-        .arg("choclate")
+        .arg("chocolate")
         .arg(fixture("fixtures/protocols.pcap"))
         .args(["--disable", "tls"])
         .output()
@@ -600,7 +600,7 @@ fn explicit_notice_enable_overrides_config_and_disable_wins() {
         (vec!["--enable", "notices", "--disable", "notices"], false),
     ] {
         let out = cli()
-            .arg("choclate")
+            .arg("chocolate")
             .arg(fixture("fixtures/dns.pcap"))
             .arg("--config")
             .arg(&config)
@@ -620,4 +620,128 @@ fn explicit_notice_enable_overrides_config_and_disable_wins() {
         );
     }
     std::fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn packet_summary_shows_time_direction_tcp_and_dns() {
+    let output = cli()
+        .args(["read"])
+        .arg(fixture("fixtures/flows.pcap"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("22:13:20.123456000Z IP 192.0.2.10:50000 > 198.51.100.20:443"));
+    assert!(text.contains("Flags [S], seq 1, win 65535, length 0, wire 54 bytes"));
+    assert!(text.contains("Flags [S.], seq 1, ack 0"));
+    assert!(!text.contains("UNIX_NS"));
+    let output = cli()
+        .arg("read")
+        .arg(fixture("fixtures/dns.pcap"))
+        .output()
+        .unwrap();
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("DNS query id 4660 rcode 0 A \"example.test.\""));
+    assert!(text.contains("DNS response id 4660 rcode 0 A \"example.test.\" answers 1"));
+    let output = cli()
+        .arg("read")
+        .arg(fixture("fixtures/simple.pcapng"))
+        .output()
+        .unwrap();
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("time unknown"));
+}
+
+#[test]
+fn chocolate_is_canonical_and_old_spelling_is_compatible() {
+    let run = |name: &str| {
+        cli()
+            .arg(name)
+            .arg(fixture("fixtures/protocols.pcap"))
+            .output()
+            .unwrap()
+    };
+    let canonical = run("chocolate");
+    let legacy = run("choclate");
+    assert!(canonical.status.success() && legacy.status.success());
+    let sorted = |bytes: Vec<u8>| {
+        let text = String::from_utf8(bytes).unwrap();
+        let mut lines: Vec<String> = text.lines().map(str::to_owned).collect();
+        lines.sort();
+        lines
+    };
+    assert_eq!(sorted(canonical.stdout), sorted(legacy.stdout));
+    let help = cli().arg("--help").output().unwrap();
+    let help = String::from_utf8(help.stdout).unwrap();
+    assert!(help.contains("chocolate"));
+    assert!(!help.contains("choclate"));
+}
+
+#[cfg(feature = "live")]
+#[test]
+fn bpf_and_cql_select_identical_packets_and_flows() {
+    for file in [
+        "example.pcap",
+        "fixtures/example.pcapng",
+        "fixtures/big-endian.pcap",
+        "fixtures/multi-section.pcapng",
+    ] {
+        for (bpf, cql) in [
+            ("dst port 443", "dst.port == 443"),
+            ("tcp", "proto == tcp"),
+            (
+                "src net 192.0.2.0/24 and not udp",
+                "src.ip in 192.0.2.0/24 && !(proto == udp)",
+            ),
+        ] {
+            for command in ["read", "flows"] {
+                let run = |filter: &str| {
+                    cli()
+                        .arg(command)
+                        .arg(fixture(file))
+                        .args([filter, "--format", "json"])
+                        .output()
+                        .unwrap()
+                };
+                let a = run(bpf);
+                let b = run(cql);
+                assert!(a.status.success(), "{file} {bpf}: {:?}", a);
+                assert!(b.status.success());
+                assert_eq!(a.stdout, b.stdout);
+            }
+        }
+    }
+    for expression in ["tcp[tcpflags] & tcp-syn != 0", "len == 54"] {
+        let out = cli()
+            .arg("read")
+            .arg(fixture("example.pcap"))
+            .arg(expression)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{:?}", out);
+        assert!(String::from_utf8(out.stdout).unwrap().contains("Flags [S]"));
+    }
+    let out = cli()
+        .args(["read", "does-not-exist.pcap", "tcp and ("])
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8(out.stderr)
+        .unwrap()
+        .contains("CREPE-CAP-005"));
+}
+
+#[cfg(not(feature = "live"))]
+#[test]
+fn portable_build_explains_missing_bpf_feature() {
+    let out = cli()
+        .arg("read")
+        .arg(fixture("example.pcap"))
+        .arg("dst port 443")
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let text = String::from_utf8(out.stderr).unwrap();
+    assert!(text.contains("CREPE-CAP-005") && text.contains("--features live"));
 }

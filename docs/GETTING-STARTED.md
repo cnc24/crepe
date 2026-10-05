@@ -6,16 +6,16 @@ you use **`crepe`**; Cargo is needed only to build or update it.
 
 ## Install a ready-made release (recommended)
 
-Download [Crepe v1.1.0](https://github.com/cnc24/crepe/releases/tag/v1.1.0).
+Download [Crepe v1.2.0](https://github.com/cnc24/crepe/releases/tag/v1.2.0).
 Choose the asset for your operating system and CPU. **Rust, Cargo and compiler
 installation are not required for these binaries.**
 
 | System | Download |
 | --- | --- |
-| macOS Apple Silicon (arm64) | `crepe-1.1.0-darwin-arm64.tar.gz` and its `.sha256` file |
-| Ubuntu/Debian x86-64 | `crepe_1.1.0_amd64.deb` and its `.sha256` file |
-| Fedora x86-64 | `crepe-1.1.0-1.x86_64.rpm` and its `.sha256` file |
-| Other compatible Linux x86-64 | `crepe-1.1.0-linux-x86_64.tar.gz` and its `.sha256` file |
+| macOS Apple Silicon (arm64) | `crepe-1.2.0-darwin-arm64.tar.gz` and its `.sha256` file |
+| Ubuntu/Debian x86-64 | `crepe_1.2.0_amd64.deb` and its `.sha256` file |
+| Fedora x86-64 | `crepe-1.2.0-1.x86_64.rpm` and its `.sha256` file |
+| Other compatible Linux x86-64 | `crepe-1.2.0-linux-x86_64.tar.gz` and its `.sha256` file |
 
 The Linux binaries need libpcap and compatible system libraries. Native package
 managers check dependencies; the generic archive is not a statically linked,
@@ -32,14 +32,14 @@ Download the macOS archive and checksum into Downloads, then run:
 
 ```sh
 cd "$HOME/Downloads"
-shasum -a 256 -c crepe-1.1.0-darwin-arm64.tar.gz.sha256
-mkdir -p crepe-1.1.0
-tar -xzf crepe-1.1.0-darwin-arm64.tar.gz -C crepe-1.1.0
+shasum -a 256 -c crepe-1.2.0-darwin-arm64.tar.gz.sha256
+mkdir -p crepe-1.2.0
+tar -xzf crepe-1.2.0-darwin-arm64.tar.gz -C crepe-1.2.0
 mkdir -p "$HOME/.local/bin"
-install -m 755 crepe-1.1.0/crepe "$HOME/.local/bin/crepe"
+install -m 755 crepe-1.2.0/crepe "$HOME/.local/bin/crepe"
 export PATH="$HOME/.local/bin:$PATH"
 crepe --version
-crepe choclate
+crepe chocolate
 ```
 
 The archive also includes the English manual and license notices. Keep them
@@ -54,15 +54,15 @@ commands for your distribution:
 
 ```sh
 # Ubuntu/Debian
-sha256sum -c crepe_1.1.0_amd64.deb.sha256
-sudo apt install ./crepe_1.1.0_amd64.deb
+sha256sum -c crepe_1.2.0_amd64.deb.sha256
+sudo apt install ./crepe_1.2.0_amd64.deb
 
 # Fedora: use these instead
-sha256sum -c crepe-1.1.0-1.x86_64.rpm.sha256
-sudo dnf install ./crepe-1.1.0-1.x86_64.rpm
+sha256sum -c crepe-1.2.0-1.x86_64.rpm.sha256
+sudo dnf install ./crepe-1.2.0-1.x86_64.rpm
 ```
 
-Then run `crepe --version` and `crepe choclate`. These packages also contain a
+Then run `crepe --version` and `crepe chocolate`. These packages also contain a
 Linux service definition; configuring and starting a background sensor is a
 separate step described in the operations manual.
 
@@ -185,12 +185,12 @@ required to try Crepe:
 ```sh
 crepe read example.pcap 'dst.port == 443'
 crepe profiles
-crepe choclate fixtures/protocols.pcap
+crepe chocolate fixtures/protocols.pcap
 ```
 
 The first command should display two TCP packets addressed to port 443, one IPv4
-and one IPv6. `choclate` performs the deeper protocol analysis. In an interactive
-terminal, `crepe choclate` alone opens the file/interface source menu. Scripts
+and one IPv6. `chocolate` performs the deeper protocol analysis. In an interactive
+terminal, `crepe chocolate` alone opens the file/interface source menu. Scripts
 should pass a file or interface explicitly.
 
 To save observations and query them later:
@@ -221,9 +221,9 @@ For a small local test, run the command for your operating system in terminal 1:
 
 ```sh
 # macOS
-crepe choclate -i lo0 --duration 10
+crepe chocolate -i lo0 --duration 10
 # Linux: use this instead
-crepe choclate -i lo --duration 10
+crepe chocolate -i lo --duration 10
 ```
 
 While it is running, generate loopback traffic in terminal 2:
@@ -237,7 +237,7 @@ administrator privileges and the explicit installed executable path:
 
 ```sh
 # macOS; substitute lo on Linux
-sudo "$HOME/.local/bin/crepe" choclate -i lo0 --duration 10
+sudo "$HOME/.local/bin/crepe" chocolate -i lo0 --duration 10
 ```
 
 Your password is entered in Terminal and is not echoed. Elevated privileges are

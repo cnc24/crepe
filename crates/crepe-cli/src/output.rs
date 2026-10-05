@@ -1,5 +1,5 @@
 use crate::{output_error, Format};
-use crepe_core::{Error, PacketEvent, Result};
+use crepe_core::{Error, Result};
 use crepe_flow::FlowRecord;
 use serde::Serialize;
 use std::io::Write;
@@ -15,7 +15,7 @@ impl<W: Write> Output<W> {
     pub fn header(&mut self, flows: bool) -> Result<()> {
         let text = match (self.format, flows) {
             (Format::Json, _) => return Ok(()),
-            (Format::Table, false) => "#      UNIX_NS                SRC.IP                                  PORT  DST.IP                                  PORT  PROTO   BYTES",
+            (Format::Table, false) => "TIME (UTC)          SOURCE > DESTINATION: PROTOCOL DETAILS (absolute TCP seq/ack)",
             (Format::Table, true) => "FLOW_ID             PROTO A                                             B                                             PKTS_A PKTS_B BYTES_A BYTES_B REASON",
             (Format::Csv, false) => "sequence,timestamp_ns,src_ip,src_port,dst_ip,dst_port,proto,captured_len,original_len,section,interface,vlans,tcp_flags",
             (Format::Csv, true) => "flow_id,start_ns,end_ns,a_ip,a_port,b_ip,b_port,proto,packets_a,packets_b,bytes_a,bytes_b,tcp_flags_a,tcp_flags_b,section,interface,vlans,end_reason",
@@ -35,23 +35,14 @@ impl<W: Write> Output<W> {
         })?;
         writeln!(self.writer).map_err(output_error)
     }
-    pub fn packet(&mut self, p: &PacketEvent) -> Result<()> {
+    pub fn packet(&mut self, view: &crepe_packet::PacketView<'_>) -> Result<()> {
+        let p = &view.event;
         let port = |p: Option<u16>| p.map(|n| n.to_string()).unwrap_or_default();
         match self.format {
             Format::Json => self.json(p),
-            Format::Table => writeln!(
-                self.writer,
-                "{:<6} {:<22} {:<39} {:<5} {:<39} {:<5} {:<7} {}",
-                p.header.sequence,
-                p.header.timestamp_ns.as_deref().unwrap_or("-"),
-                p.src.ip.to_string(),
-                port(p.src.port),
-                p.dst.ip.to_string(),
-                port(p.dst.port),
-                p.proto.to_string(),
-                p.header.original_len
-            )
-            .map_err(output_error),
+            Format::Table => {
+                writeln!(self.writer, "{}", crate::packet_display::line(view)).map_err(output_error)
+            }
             Format::Csv => writeln!(
                 self.writer,
                 "{},{},{},{},{},{},{},{},{},{},{},{},{}",

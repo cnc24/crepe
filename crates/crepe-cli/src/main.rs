@@ -5,6 +5,8 @@ mod history;
 mod live;
 mod metrics;
 mod output;
+mod packet_display;
+mod packet_filter;
 mod recipes;
 mod reporting;
 #[cfg(feature = "live")]

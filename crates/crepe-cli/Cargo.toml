@@ -9,6 +9,7 @@ name = "crepe"
 path = "src/main.rs"
 
 [dependencies]
+crepe-dns = { path = "../crepe-dns" }
 crepe-core = { path = "../crepe-core" }
 crepe-capture = { path = "../crepe-capture" }
 crepe-query = { path = "../crepe-query" }

@@ -76,6 +76,17 @@ with tempfile.TemporaryDirectory(prefix='crepe-live-') as directory:
         flows = subprocess.run([binary, 'flows', str(capture), '--format', 'json'], check=True, capture_output=True, text=True)
         records = [json.loads(line) for line in flows.stdout.splitlines()]
         assert len(records) == 1 and records[0]['packets_a'] == records[0]['packets_b'] == 1
+        # Positional tcpdump syntax also works on the native loopback linktype.
+        process = start([bpf, '--duration', '3', '--limit', '1', '--format', 'json'])
+        try:
+            sender.sendto(b'crepe-bpf-smoke', receiver.getsockname())
+            assert receiver.recvfrom(512)[0] == b'crepe-bpf-smoke'
+            filtered, _ = finish(process)
+            selected = [json.loads(line) for line in filtered.splitlines()]
+            assert len(selected) == 1 and selected[0]['dst']['port'] == port
+        finally:
+            if process.poll() is None:
+                process.kill(); process.communicate()
         # Same port remains bound, but we send no traffic: duration must still end.
         process = start(['--bpf', bpf, '--duration', '1', '--format', 'json'])
         started = time.monotonic()

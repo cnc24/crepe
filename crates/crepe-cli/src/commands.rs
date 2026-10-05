@@ -1,5 +1,6 @@
 #[cfg(feature = "live")]
 use crate::live;
+use crate::packet_filter::Filter;
 use crate::{
     args::{Cli, Command, PacketArgs},
     output,
@@ -7,7 +8,6 @@ use crate::{
 use crepe_capture::{self as capture, export::Export};
 use crepe_core::Result;
 use crepe_flow::{Config, FlowTable};
-use crepe_query as cql;
 use std::io;
 
 fn packets(
@@ -15,31 +15,41 @@ fn packets(
     live: bool,
     source: impl FnOnce(&mut dyn FnMut(capture::Record<'_>) -> Result<bool>) -> Result<()>,
 ) -> Result<()> {
-    let expr = args.filter.as_deref().map(cql::parse).transpose()?;
+    let mut filter = Filter::new(args.filter.as_deref(), args.filter_syntax)?;
     let mut export = args.write.as_deref().map(Export::create).transpose()?;
     let mut out = output::Output::new(io::BufWriter::new(io::stdout().lock()), args.format);
     out.header(false)?;
     let mut matched = 0;
     let mut malformed = 0_u64;
     let result = source(&mut |record| {
-        let decoded = match record.decode() {
-            Ok(value) => value,
-            Err(error) if args.tolerant && error.code == "CREPE-PKT-001" => {
-                malformed += 1;
-                return Ok(true);
-            }
-            Err(error) => return Err(error),
-        };
-        let Some(event) = decoded else {
+        if !filter.raw_matches(&record)? {
+            return Ok(true);
+        }
+        let decoded =
+            match crepe_packet::decode_view(record.data, record.header.clone(), record.linktype) {
+                Ok(value) => value,
+                Err(error) if args.tolerant && error.code == "CREPE-PKT-001" => {
+                    malformed += 1;
+                    return Ok(true);
+                }
+                Err(error) => {
+                    return Err(crepe_core::Error::new(
+                        error.code,
+                        format!("record {}: {}", record.header.sequence, error.message),
+                    ))
+                }
+            };
+        let Some(view) = decoded else {
             return Ok(true);
         };
-        if expr.as_ref().is_some_and(|e| !e.matches(&event)) {
+        let event = &view.event;
+        if !filter.matches(event) {
             return Ok(true);
         }
         if let Some(export) = &mut export {
             export.write(&record)?;
         }
-        out.packet(&event)?;
+        out.packet(&view)?;
         if live {
             out.flush()?;
         }
@@ -85,7 +95,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
                 },
             )
         }
-        Command::Choclate(args) => crate::recipes::run(crepe_engine::Profile::Choclate, args),
+        Command::Chocolate(args) => crate::recipes::run(crepe_engine::Profile::Chocolate, args),
         Command::Suzette(args) => crate::recipes::run(crepe_engine::Profile::Suzette, args),
         Command::Maison(args) => crate::recipes::run(crepe_engine::Profile::Maison, args),
         Command::Complete(args) => crate::recipes::run(crepe_engine::Profile::Complete, args),
@@ -107,10 +117,10 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             crate::history::print_json(&summary)
         }
         Command::Profiles => crate::history::print_json(&serde_json::json!({
-            "greeting": "Bon appétit! Try crepe choclate, banane, suzette, maison or complete.",
+            "greeting": "Bon appétit! Try crepe chocolate, banane, suzette, maison or complete.",
             "profiles": {
                 "sucre": "Packet metadata",
-                "choclate": "Deep network analysis: packets, flows, DNS/TLS/HTTP/SSH, anomalies and notices",
+                "chocolate": "Deep network analysis: packets, flows, DNS/TLS/HTTP/SSH, anomalies and notices",
                 "banane": "NetFlow v5/v9 and IPFIX UDP collector",
                 "suzette": "Capture forensics, historical timeline and correlation",
                 "maison": "Your own configuration via --config FILE",
@@ -185,22 +195,21 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         }
         Command::Read { file, args } => {
             // Validate before opening, so malformed queries have consistent precedence.
-            if let Some(filter) = &args.filter {
-                cql::parse(filter)?;
-            }
+            Filter::new(args.filter.as_deref(), args.filter_syntax)?;
             let input = capture::open(&file)?;
             packets(args, false, |emit| capture::read_records(input, emit))
         }
         Command::Flows {
             file,
             filter,
+            filter_syntax,
             format,
             max_flows,
             tcp_idle,
             udp_idle,
             active_timeout,
         } => {
-            let expr = filter.as_deref().map(cql::parse).transpose()?;
+            let mut filter = Filter::new(filter.as_deref(), filter_syntax)?;
             let mut table = FlowTable::new(Config {
                 max_flows: max_flows as usize,
                 tcp_idle_secs: tcp_idle,
@@ -210,11 +219,16 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             let input = capture::open(&file)?;
             let mut out = output::Output::new(io::BufWriter::new(io::stdout().lock()), format);
             out.header(true)?;
-            capture::read(input, |event| {
-                if expr.as_ref().is_none_or(|expr| expr.matches(&event)) {
-                    table.push(&event, |flow| out.flow(&flow))?;
+            capture::read_records(input, |record| {
+                if !filter.raw_matches(&record)? {
+                    return Ok(true);
                 }
-                Ok(())
+                if let Some(event) = record.decode()? {
+                    if filter.matches(&event) {
+                        table.push(&event, |flow| out.flow(&flow))?;
+                    }
+                }
+                Ok(true)
             })?;
             table.finish(|flow| out.flow(&flow))?;
             if table.skipped_fragments != 0 || table.skipped_other_protocols != 0 {
@@ -233,12 +247,8 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             promisc,
             args,
         } => {
-            let hint = args
-                .filter
-                .as_deref()
-                .map(cql::parse)
-                .transpose()?
-                .and_then(|expr| expr.ethernet_prefilter());
+            let hint =
+                Filter::new(args.filter.as_deref(), args.filter_syntax)?.ethernet_prefilter();
             packets(args, true, |emit| {
                 live::capture(
                     &interface,

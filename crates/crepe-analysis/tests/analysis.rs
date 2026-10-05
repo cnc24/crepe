@@ -127,6 +127,7 @@ fn fin_followed_by_ack_is_not_an_anomaly() {
             event: p.clone(),
             payload,
             tcp_sequence: Some(sequence),
+            tcp_header: None,
         };
         a.process(&view, |e| {
             events.push(e);
@@ -153,6 +154,7 @@ fn midstream_pipelining_duplicates_and_rst() {
         event: p.clone(),
         payload: &bytes,
         tcp_sequence: Some(500),
+        tcp_header: None,
     };
     a.process(&view, |e| {
         events.push(e);
@@ -171,6 +173,7 @@ fn midstream_pipelining_duplicates_and_rst() {
         event: p.clone(),
         payload: &more[..4],
         tcp_sequence: Some(500 + bytes.len() as u32),
+        tcp_header: None,
     };
     a.process(&view, |e| {
         events.push(e);
@@ -182,6 +185,7 @@ fn midstream_pipelining_duplicates_and_rst() {
         event: p,
         payload: &[],
         tcp_sequence: Some(504 + bytes.len() as u32),
+        tcp_header: None,
     };
     a.process(&view, |e| {
         events.push(e);
