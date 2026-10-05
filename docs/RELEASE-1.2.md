@@ -46,3 +46,12 @@ The human packet view is a compact summary, not every tcpdump protocol decoder.
 It uses UTC time-of-day, absolute TCP sequence/ACK numbers and numeric endpoints.
 Historical CQL and nfdump flow syntax are separate languages. Existing platform
 limits in [DESIGN-STATUS.md](DESIGN-STATUS.md) still apply.
+
+## 1.2.1 flow presentation follow-up
+
+The wide flow table is replaced with 80-column wrapped summaries. Added tests
+cover UTC dates, negative timestamps, duration across midnight, long IPv6
+addresses, maximum counters, directional flags/bytes and file-end versus TCP
+close. The CLI suite also retains JSON/CSV flow-counter checks. Formatting,
+strict all-feature Clippy, CLI tests with and without optional features, release
+build and the 43-check external-tool comparison are rerun for this patch.

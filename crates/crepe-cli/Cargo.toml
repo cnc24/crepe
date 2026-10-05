@@ -20,6 +20,7 @@ crepe-engine = { path = "../crepe-engine" }
 crepe-storage = { path = "../crepe-storage" }
 crepe-collector = { path = "../crepe-collector" }
 clap.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 serde_json.workspace = true
 
 serde.workspace = true

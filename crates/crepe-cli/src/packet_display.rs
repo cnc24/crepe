@@ -16,14 +16,14 @@ fn timestamp(value: Option<&str>) -> String {
         ns.rem_euclid(1_000_000_000)
     )
 }
-fn endpoint(e: &Endpoint) -> String {
+pub(crate) fn endpoint(e: &Endpoint) -> String {
     match (e.ip.is_ipv6(), e.port) {
         (true, Some(port)) => format!("[{}]:{port}", e.ip),
         (false, Some(port)) => format!("{}:{port}", e.ip),
         (_, None) => e.ip.to_string(),
     }
 }
-fn flags(value: u8) -> String {
+pub(crate) fn flags(value: u8) -> String {
     let mut result = String::new();
     for (bit, symbol) in [
         (1, 'F'),

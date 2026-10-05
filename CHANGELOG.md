@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.1 — 2026-10-05
+
+- Replace the wide flow table with 80-column wrapped summaries: UTC date/time,
+  duration, bidirectional endpoints, exact packet/frame-byte counters, cumulative
+  TCP flags and readable end reasons/passive state. JSON and CSV stay unchanged.
+- Explain direction, file-end versus connection-close, and flow IDs in the manual.
+
 ## 1.2.0 — 2026-10-05
 
 - Correct the canonical recipe name to `chocolate`; retain `choclate` as a CLI,

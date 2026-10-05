@@ -16,7 +16,7 @@ impl<W: Write> Output<W> {
         let text = match (self.format, flows) {
             (Format::Json, _) => return Ok(()),
             (Format::Table, false) => "TIME (UTC)          SOURCE > DESTINATION: PROTOCOL DETAILS (absolute TCP seq/ack)",
-            (Format::Table, true) => "FLOW_ID             PROTO A                                             B                                             PKTS_A PKTS_B BYTES_A BYTES_B REASON",
+            (Format::Table, true) => "FLOWS (UTC) | -> left to right, <- right to left | bytes include link headers",
             (Format::Csv, false) => "sequence,timestamp_ns,src_ip,src_port,dst_ip,dst_port,proto,captured_len,original_len,section,interface,vlans,tcp_flags",
             (Format::Csv, true) => "flow_id,start_ns,end_ns,a_ip,a_port,b_ip,b_port,proto,packets_a,packets_b,bytes_a,bytes_b,tcp_flags_a,tcp_flags_b,section,interface,vlans,end_reason",
         };
@@ -69,20 +69,9 @@ impl<W: Write> Output<W> {
         let reason = reason.as_str().unwrap_or("unknown");
         match self.format {
             Format::Json => self.json(f),
-            Format::Table => writeln!(
-                self.writer,
-                "{} {:<5} {:<45} {:<45} {:<6} {:<6} {:<7} {:<7} {}",
-                f.flow_id,
-                f.proto.to_string(),
-                endpoint(&f.a),
-                endpoint(&f.b),
-                f.packets_a,
-                f.packets_b,
-                f.bytes_a,
-                f.bytes_b,
-                reason
-            )
-            .map_err(output_error),
+            Format::Table => {
+                writeln!(self.writer, "{}", crate::flow_display::summary(f)).map_err(output_error)
+            }
             Format::Csv => writeln!(
                 self.writer,
                 "{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",

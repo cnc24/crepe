@@ -745,3 +745,32 @@ fn portable_build_explains_missing_bpf_feature() {
     let text = String::from_utf8(out.stderr).unwrap();
     assert!(text.contains("CREPE-CAP-005") && text.contains("--features live"));
 }
+
+#[test]
+fn flow_summary_is_compact_directional_and_distinguishes_eof_from_close() {
+    let output = cli()
+        .arg("flows")
+        .arg(fixture("fixtures/flows.pcap"))
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.lines().all(|line| line.chars().count() <= 80));
+    assert!(text.contains("2023-11-14 22:13:20.123Z TCP | duration 6.000s"));
+    assert!(text.contains("192.0.2.10:50000 <-> 198.51.100.20:443"));
+    assert!(text.contains("-> 3 packets, 162 bytes [FS.] | <- 2 packets, 108 bytes [FS.]"));
+    assert!(text.contains("end: FIN both ways | observed TCP: closed"));
+    assert!(text.contains("end: TCP reset | observed TCP: reset"));
+    assert!(text.contains("-> 1 packet, 42 bytes | <- 1 packet, 42 bytes"));
+    assert!(text.contains("end: input ended"));
+    assert!(!text.contains("PKTS_A"));
+    let output = cli()
+        .arg("flows")
+        .arg(fixture("example.pcap"))
+        .args(["proto == tcp"])
+        .output()
+        .unwrap();
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.contains("end: input ended | observed TCP: SYN seen"));
+    assert!(!text.contains("observed TCP: closed"));
+}

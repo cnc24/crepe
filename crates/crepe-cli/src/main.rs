@@ -1,5 +1,6 @@
 mod args;
 mod commands;
+mod flow_display;
 mod history;
 #[cfg(feature = "live")]
 mod live;

@@ -130,6 +130,41 @@ answer count). TCP DNS, full resource records, HTTP and TLS details belong to
 HTTP bodies. JSON/CSV packet schemas and lossless Unix-nanosecond timestamps
 are unchanged for scripts.
 
+### Reading the flow summary (1.2.1)
+
+`crepe flows FILE [FILTER]` now prints compact blocks instead of a wide A/B
+column table. Lines wrap at 80 columns without truncating addresses or counters,
+including when piped. For a known synthetic TCP conversation:
+
+```text
+2023-11-14 22:13:20.123Z TCP | duration 6.000s | CX-0000000000000001
+192.0.2.10:50000 <-> 198.51.100.20:443
+-> 3 packets, 162 bytes [FS.] | <- 2 packets, 108 bytes [FS.]
+end: FIN both ways | observed TCP: closed
+```
+
+The timestamp is the earliest packet timestamp in UTC; duration is latest minus
+earliest packet timestamp, displayed to milliseconds. It is not necessarily the full
+connection lifetime. Endpoints retain canonical ordering: left is not necessarily
+the client. `->` means left to right, `<-` means right to left. Flags are the
+**union of observed TCP flags per direction**, not the last packet's flags.
+Byte counters are exact original frame bytes including link headers, not payload
+bytes; neither sizes nor counters are abbreviated or rounded. TCP state is a
+passive observation, not proof of what happened at either endpoint.
+
+`input ended` means the capture file ended, not that the connection closed.
+`FIN both ways`, `TCP reset`, `idle timeout`, `active timeout` and
+`capacity eviction` distinguish the other reasons. Interface/section/VLAN scope
+is printed when non-default. IDs such as `CX-...` are local flow-record IDs;
+use the persisted conversation `flow_id` returned by historical queries for
+`crepe trace`.
+
+One human flow uses several lines, so `head` may cut a block in half. For
+one-record-per-line processing, use `--format json`; CSV is also unchanged.
+A filter such as `port 443` covers both directions. nfdump's extra event/NAT
+columns have no direct equivalent in this packet-derived flow summary; absent
+NAT/event fields are not evidence of packet loss.
+
 ### Historical and live analysis queries
 
 `query STORE '...'` and a live recipe's `--query '...'` use **historical CQL**,
@@ -153,7 +188,7 @@ See [the tool comparison](COMPARISON.md) for Zeek/SiLK and
 
 The user-facing executable is **`crepe`**. Cargo is Rust's build manager and is
 needed only for a source build or update. Ready-made binaries are available in
-[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.0); Getting started
+[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.1); Getting started
 covers both binary and source installation.
 Run the following examples from the cloned repository root, where `example.pcap`
 and `fixtures/` are supplied synthetic test data:
