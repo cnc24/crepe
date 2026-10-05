@@ -130,6 +130,7 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
     if let Some(interface) = &args.interface {
         #[cfg(feature = "live")]
         {
+            crate::report!("Live analysis on {interface} for {}s: waiting for packets; observations are emitted as JSON Lines. Flows may appear when they expire or capture ends.", args.duration);
             let source = crepe_storage::identity(&[
                 &config.sensor,
                 interface,
@@ -194,6 +195,9 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
                 summary.packets,
                 summary.observations
             );
+            if summary.observations == 0 {
+                crate::report!("No observations produced. Check interface traffic and enabled analysis modules.");
+            }
             return Ok(());
         }
         #[cfg(not(feature = "live"))]
@@ -217,7 +221,21 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
         .store
         .clone()
         .unwrap_or_else(|| temp.path().join("history"));
-    let summary = crepe_engine::ingest(file, &store, &config)?;
+    crate::report!("Analyzing {}. JSON Lines appear after the complete file has been processed and history committed; large files may take time.", file.display());
+    let started = std::time::Instant::now();
+    let mut last = started;
+    let summary = crepe_engine::ingest_with_progress(file, &store, &config, |packets| {
+        if last.elapsed() >= std::time::Duration::from_secs(2) {
+            crate::report!(
+                "Processing: {packets} capture records read ({}s elapsed).",
+                started.elapsed().as_secs()
+            );
+            last = std::time::Instant::now();
+        }
+    })?;
+    if summary.observations == 0 {
+        crate::report!("No observations produced. The file may contain no supported IP traffic, or analysis modules may be disabled.");
+    }
     crate::report!("Magnifique! {} packets, {} observations. Showing at most 10,000 observations as JSON Lines.", summary.packets, summary.observations);
     if args.store.is_some() {
         crate::report!("History saved to {}", store.display());

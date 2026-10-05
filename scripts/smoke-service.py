@@ -15,6 +15,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-service-') as directory:
         try:
             line = json.loads(proc.stderr.readline()); assert line['message'].startswith('Metrics listening'), line
             metrics_port = int(line['message'].rsplit(':', 1)[1])
+            line = json.loads(proc.stderr.readline()); assert 'Live analysis' in line['message'], line
             line = json.loads(proc.stderr.readline()); assert 'Capture ready' in line['message'], line
             query = struct.pack('!6H', 123, 0x100, 1, 0, 0, 0) + b'\x04test\x07example\x00' + struct.pack('!HH', 1, 1)
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
@@ -56,6 +57,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-service-') as directory:
         # A hard crash releases the OS lock; the next session discards only its unpublished tail.
         crashed = subprocess.Popen([binary, '--serious', 'daemon', '--config', str(config), '--duration', '30'], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         try:
+            assert 'Live analysis' in crashed.stderr.readline()
             assert 'Capture ready' in crashed.stderr.readline()
             assert list((root/'history').glob('.staging-*'))
             crashed.kill(); crashed.communicate(timeout=5)

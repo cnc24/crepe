@@ -693,3 +693,24 @@ Hot rows are provisional until checkpointed: they can disappear after a writer
 error/crash. Published rows remain durable. The legacy binary reads committed
 Parquet only. Backups still use `schema.json` and `data/`; `.hot.jsonl` and
 `.hot-new-*` are live staging internals, not an additional durable dataset.
+
+### Recipe output and presentation
+
+`crepe suzette traffic.pcap --store history` analyzes packets, bidirectional flows
+and DNS/TLS/HTTP/SSH metadata. Suzette currently uses the same analysis engines as
+Chocolate; the name does not enable an automatic incident verdict. Offline recipes
+process the complete file and commit history before printing up to 10,000 JSON
+observations. Startup and periodic record counts go to stderr. Hashing and final
+history commit can also take time; record counts indicate input consumed, not a
+percentage complete. Use `crepe query history '* | limit 20'` to inspect saved data.
+Without `--store`, the temporary history is removed after output.
+
+Live recipes stream observations as they become available; flow records can appear
+only at expiry or shutdown. Quiet interfaces can produce no observations. A final
+summary states the packet and observation counts. Use `crepe read FILE` for packet
+text output instead of the recipe's structured JSON.
+
+Help and data output are factual. Recipe names choose workflows; `--serious`
+disables humorous runtime diagnostics without changing analysis. `crepe interface`
+and `crepe interfaces` both list capture interfaces. Linux `capture -i any` supports
+loopback IP traffic in cooked SLL/SLL2 captures.

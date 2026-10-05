@@ -4,7 +4,8 @@ use std::path::PathBuf;
 #[command(
     name = "crepe",
     version,
-    about = "Bon appétit! Packet capture and flow explorer"
+    about = "Packet capture and flow explorer",
+    after_help = "Start here:\n  read FILE [FILTER]     Inspect packets (CQL or tcpdump filters).\n  flows FILE [FILTER]    Summarize connections.\n  capture -i INTERFACE  Inspect live packets.\n\nAnalysis recipes:\n  chocolate / suzette / complete  Analyze packets, flows and application metadata.\n  maison                         Use your configured analysis settings.\n  Run a recipe without arguments for source selection. File recipes print JSON\n  after analysis finishes; live recipes stream observations. Use --store PATH\n  to retain history, then query PATH 'YOUR QUERY'.\n\nPresentation:\n  Recipe names select analysis workflows; --serious only disables humorous\n  diagnostics. It does not change analysis. Help and data output stay factual."
 )]
 pub(crate) struct Cli {
     /// Disable French flair in runtime messages.
@@ -91,7 +92,11 @@ pub(crate) enum Command {
     /// Deep network analysis: packets, flows, reassembly and application metadata.
     #[command(alias = "choclate")]
     Chocolate(RecipeArgs),
-    /// Forensics: analyze a capture and query its historical observations.
+    /// Analysis recipe: packets, flows and application metadata as JSON.
+    #[command(
+        long_about = "Analyze packets, flows and DNS/TLS/HTTP/SSH metadata. File input is fully processed before JSON Lines are printed (up to 10,000 observations). Use --store PATH to retain all observations, then crepe query PATH 'YOUR QUERY'. Live input streams observations as they become available. No arguments opens source selection. Suzette currently uses the same analysis engines as chocolate; it is not an automatic incident verdict.",
+        after_help = "Examples:\n  crepe suzette traffic.pcap --store history\n  crepe query history '* | limit 20'\n  crepe suzette --interface lo --duration 10"
+    )]
     Suzette(RecipeArgs),
     /// Run with your own configuration.
     Maison(RecipeArgs),
@@ -161,6 +166,7 @@ pub(crate) enum Command {
     },
     #[cfg(feature = "live")]
     /// List libpcap capture interfaces.
+    #[command(visible_alias = "interface")]
     Interfaces,
     #[cfg(feature = "live")]
     /// Capture live traffic (requires capture permissions). Alias: sucre.

@@ -8,22 +8,26 @@ import socket
 import struct
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 binary = str(Path('target/release/crepe').resolve())
 
 def ready(proc, marker):
+    deadline = time.monotonic() + 10
     with selectors.DefaultSelector() as selector:
         selector.register(proc.stderr, selectors.EVENT_READ)
-        assert selector.select(10), 'readiness timeout'
-        data = bytearray()
-        while not data.endswith(b'\n'):
-            byte = os.read(proc.stderr.fileno(), 1)
-            assert byte, 'unexpected end of readiness output'
-            data.extend(byte)
-        line = data.decode()
-        assert marker in line, line
-        return line
+        while True:
+            remaining = deadline - time.monotonic()
+            assert remaining > 0 and selector.select(remaining), 'readiness timeout'
+            data = bytearray()
+            while not data.endswith(b'\n'):
+                byte = os.read(proc.stderr.fileno(), 1)
+                assert byte, 'unexpected end of readiness output'
+                data.extend(byte)
+            line = data.decode()
+            if marker in line:
+                return line
 
 def finish(proc):
     out, err = proc.communicate(timeout=15)

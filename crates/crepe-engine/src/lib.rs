@@ -323,6 +323,16 @@ pub enum Input<'a> {
     Observation(Box<Row>),
 }
 pub fn ingest(file: &Path, store: &Path, config: &Config) -> Result<Summary> {
+    ingest_with_progress(file, store, config, |_| {})
+}
+
+/// Import atomically, reporting capture records consumed (not committed observations).
+pub fn ingest_with_progress(
+    file: &Path,
+    store: &Path,
+    config: &Config,
+    mut progress: impl FnMut(u64),
+) -> Result<Summary> {
     config.validate()?;
     if matches!(config.profile, Profile::Banane) {
         return Err(Error::new("CREPE-CONFIG-001", "Banane collects NetFlow/IPFIX over UDP; use crepe banane --listen IP:PORT instead of importing a PCAP."));
@@ -331,8 +341,12 @@ pub fn ingest(file: &Path, store: &Path, config: &Config) -> Result<Summary> {
     let batch = identity(&[&source, &config.sensor]);
     let mut writer = Writer::begin(store, &batch)?;
     let summary = process_records(config, &source, Some(&mut writer), None, |emit| {
+        let mut records = 0u64;
         crepe_capture::read_records(crepe_capture::open(file)?, |record| {
-            emit(Input::Packet(record))
+            let more = emit(Input::Packet(record))?;
+            records += 1;
+            progress(records);
+            Ok(more)
         })
     })?;
     if crepe_storage::hash_file(file)? != source {

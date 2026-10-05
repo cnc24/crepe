@@ -825,3 +825,44 @@ fn flow_details_does_not_change_machine_formats() {
         assert_eq!(run(false), run(true));
     }
 }
+
+#[test]
+fn recipe_help_and_processing_feedback_are_factual() {
+    let help = cli().args(["--serious", "--help"]).output().unwrap();
+    let text = String::from_utf8(help.stdout).unwrap();
+    assert!(help.status.success());
+    assert!(text.contains("Analysis recipes:"));
+    assert!(!text.contains("Bon appétit"));
+    let help = cli().args(["suzette", "--help"]).output().unwrap();
+    assert!(String::from_utf8(help.stdout)
+        .unwrap()
+        .contains("fully processed"));
+    let run = cli()
+        .args(["--serious", "suzette"])
+        .arg(fixture("example.pcap"))
+        .output()
+        .unwrap();
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let messages = String::from_utf8(run.stderr).unwrap();
+    assert!(messages.contains("Analyzing"));
+    assert!(messages.contains("JSON Lines"));
+    assert!(!messages.contains("Magnifique"));
+    assert!(!run.stdout.is_empty());
+    for line in String::from_utf8(run.stdout).unwrap().lines() {
+        serde_json::from_str::<serde_json::Value>(line).unwrap();
+    }
+}
+
+#[cfg(feature = "live")]
+#[test]
+fn singular_interface_alias_is_accepted() {
+    let output = cli().args(["interface", "--help"]).output().unwrap();
+    assert!(output.status.success());
+    assert!(String::from_utf8(output.stdout)
+        .unwrap()
+        .contains("capture interfaces"));
+}

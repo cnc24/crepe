@@ -2,6 +2,11 @@
 
 ## 1.2.2 — 2026-10-05
 
+- Fix Linux `capture -i any` on loopback traffic (SLL/ARPHRD_LOOPBACK); test live ICMP capture and replay on Linux.
+- Accept `interface` as an alias for `interfaces`.
+- Keep help factual, explain recipe workflows and Suzette's current behavior.
+- Report file-analysis startup and periodic record progress on stderr; explain empty results and live waiting. JSON data stays clean.
+
 - Correct the default flow presentation to one aligned row per bidirectional flow,
   with UTC start, clock-style duration, endpoints and exact total counters.
 - Keep expanded directional flags/state/end reasons behind `flows --details`.

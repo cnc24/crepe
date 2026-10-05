@@ -19,8 +19,8 @@ parser.add_argument('--interface', default='lo0' if os.uname().sysname == 'Darwi
 args = parser.parse_args()
 binary = str(Path(args.binary).resolve())
 
-def start(extra):
-    process = subprocess.Popen([binary, 'capture', '-i', args.interface, *extra], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+def start(extra, interface=None):
+    process = subprocess.Popen([binary, 'capture', '-i', interface or args.interface, *extra], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     selector = selectors.DefaultSelector()
     selector.register(process.stderr, selectors.EVENT_READ)
     try:
@@ -96,4 +96,23 @@ with tempfile.TemporaryDirectory(prefix='crepe-live-') as directory:
         process.send_signal(signal.SIGINT)
         interrupted, _ = finish(process, timeout=4)
         assert not interrupted
+    if os.uname().sysname == 'Linux':
+        # Regression: Linux any uses SLL/SLL2 with ARPHRD_LOOPBACK, not Ethernet.
+        any_capture = Path(directory) / 'any.pcap'
+        process = start(['--bpf', 'icmp and host 127.0.0.1', '--duration', '3',
+                         '--format', 'json', '--write', str(any_capture)], interface='any')
+        try:
+            subprocess.run(['ping', '-c', '2', '-W', '1', '127.0.0.1'],
+                           check=True, capture_output=True, timeout=5)
+            stdout, _ = finish(process)
+            rows = [json.loads(line) for line in stdout.splitlines()]
+            assert len(rows) >= 4, rows
+            assert {row['icmp_type'] for row in rows} == {0, 8}, rows
+            replay = subprocess.run([binary, 'read', str(any_capture), '--format', 'json'],
+                                    check=True, capture_output=True, text=True)
+            assert [json.loads(line) for line in replay.stdout.splitlines()] == rows
+        finally:
+            if process.poll() is None:
+                process.kill(); process.communicate()
+        print('PASS: Linux any loopback ICMP capture and PCAP replay.')
 print('PASS: live UDP request/reply, PCAP replay, bidirectional flow, quiet deadline, SIGINT; temporary captures removed.')

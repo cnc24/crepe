@@ -63,3 +63,14 @@ bidirectional totals. The 1.2.1 expanded view is available through `--details`.
 Tests cover row count, duration, totals, full IPv6 endpoints, and unchanged
 JSON/CSV with or without `--details`; the existing detail-view tests remain.
 Packet output and aggregation semantics are unchanged.
+
+### 1.2.2 capture and recipe regression coverage
+
+- SLL/SLL2 loopback IPv4/IPv6 unit tests, including short/truncated input and
+  non-IP handling; Linux CI also captures real loopback ICMP through `any` and
+  verifies exported PCAP replay.
+- Singular `interface` command alias, factual help, Suzette processing feedback,
+  and valid JSON-only stdout are covered by CLI regressions.
+- Local default/all-feature workspace tests, strict Clippy, release build, live
+  capture, recipe and service smoke tests pass. All 43 tcpdump/nfpcapd/nfdump
+  comparisons pass with the updated decoder and one-row flow presentation.

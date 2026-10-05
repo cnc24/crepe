@@ -105,7 +105,24 @@ fn sliced(data: &[u8], link: u32) -> Result<Option<SlicedPacket<'_>>> {
     let packet = match link {
         1 => SlicedPacket::from_ethernet(data),
         101 | 228 | 229 => SlicedPacket::from_ip(data),
-        113 => SlicedPacket::from_linux_sll(data),
+        113 => {
+            if data.len() < 16 {
+                return Err(malformed("short Linux SLL header"));
+            }
+            // libpcap's Linux `any` device includes ARPHRD_LOOPBACK (772).
+            // etherparse's SLL parser currently rejects that hardware type,
+            // although its protocol field carries the same EtherType as Ethernet.
+            if u16::from_be_bytes([data[2], data[3]]) == 772 {
+                etherparse::LinuxSllPacketType::try_from(u16::from_be_bytes([data[0], data[1]]))
+                    .map_err(|e| Error::new("CREPE-PKT-001", e))?;
+                SlicedPacket::from_ether_type(
+                    etherparse::EtherType(u16::from_be_bytes([data[14], data[15]])),
+                    &data[16..],
+                )
+            } else {
+                SlicedPacket::from_linux_sll(data)
+            }
+        }
         0 | 108 => {
             let family: [u8; 4] = data
                 .get(..4)
@@ -171,4 +188,48 @@ pub fn network(data: &[u8], link: u32) -> Result<Option<(&[u8], Vec<u16>)>> {
         })
         .collect();
     Ok(Some((bytes, vlans)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn linux_any_loopback_sll_and_sll2() {
+        for ipv6 in [false, true] {
+            let mut ip = Vec::new();
+            let builder = if ipv6 {
+                etherparse::PacketBuilder::ipv6([0; 16], [1; 16], 64)
+            } else {
+                etherparse::PacketBuilder::ipv4([127, 0, 0, 1], [127, 0, 0, 1], 64)
+            };
+            builder.udp(1234, 53).write(&mut ip, b"loopback").unwrap();
+            let kind: u16 = if ipv6 { 0x86dd } else { 0x0800 };
+            for link in [113, 276] {
+                let mut frame = if link == 113 {
+                    let mut h = vec![0; 16];
+                    h[2..4].copy_from_slice(&772u16.to_be_bytes());
+                    h[14..16].copy_from_slice(&kind.to_be_bytes());
+                    h
+                } else {
+                    let mut h = vec![0; 20];
+                    h[..2].copy_from_slice(&kind.to_be_bytes());
+                    h[8..10].copy_from_slice(&772u16.to_be_bytes());
+                    h
+                };
+                frame.extend_from_slice(&ip);
+                assert_eq!(network(&frame, link).unwrap().unwrap().0, ip);
+                let packet = sliced(&frame, link).unwrap().unwrap();
+                assert!(matches!(packet.transport, Some(TransportSlice::Udp(_))));
+                assert!(sliced(&frame[..10], link).is_err());
+                assert!(sliced(&frame[..frame.len() - 1], link).is_err());
+            }
+        }
+        let mut non_ip = [0; 16];
+        non_ip[2..4].copy_from_slice(&772u16.to_be_bytes());
+        non_ip[14..16].copy_from_slice(&0x88b5u16.to_be_bytes());
+        assert!(network(&non_ip, 113).unwrap().is_none());
+        non_ip[0] = 255;
+        assert!(network(&non_ip, 113).is_err());
+    }
 }
