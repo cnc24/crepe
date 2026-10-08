@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Add the Crepe mascot to the README, plain ASCII `logo` command and interactive root-help banner.
+
 - Expand short and long command help with profile selection, executable examples, storage/query workflows, filter boundaries, units and update prerequisites.
 - Clarify the current shared analysis engines, alias mapping and persistence differences between recipes.
 

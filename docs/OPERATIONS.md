@@ -32,6 +32,7 @@ describe the same workflow.
 | `timeline DIR --limit N` | — | Chronological stored observations |
 | `collect` | `banane` | Receive NetFlow v5/v9/IPFIX; `--listen IP:PORT`, `--duration SECONDS`, `--count N`, `--store DIR`, `--sensor NAME` |
 | `update [--check] [--output NEW_PATH]` | — | Check/install the latest stable official archive; see update instructions below |
+| `logo` | — | Print the mascot and wordmark as plain ASCII; can be redirected to a file |
 | `licenses` | — | Print embedded project license and third-party notices |
 | `config [FILE]` | — | Validate and show effective configuration |
 | `daemon --config FILE` | — | Configured live sensor; optional `--duration SECONDS` |
@@ -922,3 +923,10 @@ Crepe adopts tcpdump-style verbosity/dumps, selected Wireshark fields, and a
 consistent flow-query pipeline. It does not implement every option/dissector of
 these tools. nfdump's frequently directional records must still be normalized
 before comparison with Crepe's bidirectional records.
+
+## Logo and terminal banner
+
+The repository logo is in `assets/crepe-logo.jpg`; its plain ASCII counterpart is
+`assets/crepe-logo.txt`. Run `crepe logo` to print it, or redirect it to a text file.
+Interactive root help (`crepe -h`) includes the banner. `--serious` suppresses the
+automatic banner; redirected help and packet/JSON/CSV output do not include it.

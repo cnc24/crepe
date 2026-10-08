@@ -1,5 +1,10 @@
 # Crepe
 
+<p align="center">
+  <img src="assets/crepe-logo.jpg" alt="Crepe mascot: a folded crepe filled with hex data, inspecting network packets" width="720">
+</p>
+
+
 Linux-first network research and analysis in Rust, developed and tested on macOS.
 Version 1.2.3 adds `crepe update`, Layer-2 packet output, application-protocol shortcuts,
 HTTP summaries/dumps, factual command names with recipe aliases, selected Wireshark
@@ -27,6 +32,7 @@ After installing, run these examples from the cloned repository directory:
 crepe read example.pcap 'dst port 443'
 crepe analyze fixtures/protocols.pcap
 crepe profiles
+crepe logo
 crepe chocolate fixtures/protocols.pcap
 crepe suzette fixtures/dns.pcap --store ./case
 crepe ingest fixtures/dns.pcap --store ./history --sensor lab

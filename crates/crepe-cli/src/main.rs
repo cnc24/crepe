@@ -20,7 +20,10 @@ mod windows;
 use args::{Cli, Format};
 use clap::{CommandFactory, FromArgMatches};
 use crepe_core::Error;
-use std::{io, process::ExitCode};
+use std::{
+    io::{self, IsTerminal},
+    process::ExitCode,
+};
 
 fn output_error(e: io::Error) -> Error {
     Error::new(
@@ -43,6 +46,11 @@ fn main() -> ExitCode {
     );
     let command = help::configure(Cli::command());
     let template = help::root(&command);
+    let template = if io::stdout().is_terminal() && reporting::flair_enabled() {
+        format!("{}\n{template}", help::LOGO)
+    } else {
+        template
+    };
     let cli = match command
         .help_template(template)
         .try_get_matches()

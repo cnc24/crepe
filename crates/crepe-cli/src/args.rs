@@ -98,6 +98,8 @@ pub(crate) struct FlowArgs {
 }
 #[derive(Subcommand)]
 pub(crate) enum Command {
+    /// Print the Crepe mascot and wordmark as plain ASCII.
+    Logo,
     /// Print the embedded project license and third-party notices (also retained by self-updates).
     Licenses,
     /// Check GitHub for a stable release and atomically update an archive installation.

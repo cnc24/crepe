@@ -176,6 +176,13 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             let summary = crepe_engine::ingest(&file, &store, &c)?;
             crate::history::print_json(&summary)
         }
+        Command::Logo => {
+            use std::io::Write;
+            io::stdout()
+                .lock()
+                .write_all(crate::help::LOGO.as_bytes())
+                .map_err(crate::output_error)
+        }
         Command::Profiles => crate::history::print_json(&serde_json::json!({
             "greeting": if crate::reporting::flair_enabled() { "Bon appétit! Choose an analysis workflow." } else { "Choose an analysis workflow." },
             "profiles": {

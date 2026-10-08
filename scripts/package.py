@@ -51,7 +51,7 @@ def main():
         target = f'{platform.system().lower()}-{platform.machine()}'
         output = args.output_dir / f'crepe-{version}-{target}.tar.gz'
         files = {'crepe': (binary.read_bytes(), 0o755)}
-        for path in [ROOT / 'README.md', ROOT / 'LICENSE', ROOT / 'CHANGELOG.md', ROOT / 'config/example.toml', *sorted((ROOT / 'docs').glob('*.md')), *sorted((ROOT / 'plugins').rglob('*')), *sorted((ROOT / 'packaging').rglob('*')), *sorted((ROOT / 'config').glob('*.jsonl'))]:
+        for path in [ROOT / 'README.md', ROOT / 'LICENSE', ROOT / 'CHANGELOG.md', ROOT / 'config/example.toml', *sorted((ROOT / 'assets').glob('*')), *sorted((ROOT / 'docs').glob('*.md')), *sorted((ROOT / 'plugins').rglob('*')), *sorted((ROOT / 'packaging').rglob('*')), *sorted((ROOT / 'config').glob('*.jsonl'))]:
             if path.is_file():
                 files[str(path.relative_to(ROOT))] = (path.read_bytes(), 0o644)
     for path in [ROOT / 'THIRD-PARTY-NOTICES.txt', ROOT / 'legal/inventory.json', ROOT / 'legal/README.md']:

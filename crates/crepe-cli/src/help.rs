@@ -1,5 +1,6 @@
 use clap::Command;
 use std::fmt::Write;
+pub const LOGO: &str = include_str!("../../../assets/crepe-logo.txt");
 /// Derive the alias table from Clap so help and executable command names agree.
 pub fn root(command: &Command) -> String {
     let mut table = String::from("Commands:\n  COMMAND      ALIAS                 PURPOSE\n");
@@ -28,6 +29,7 @@ pub fn configure(mut command: Command) -> Command {
         .collect();
     for name in names {
         let extra = match name.as_str() {
+            "logo" => "Examples:\n  crepe logo\n  crepe logo > crepe-logo.txt\n\nPrints the mascot and wordmark using only ASCII, without colors or terminal escapes.\nThe interactive root help also shows the logo; --serious hides that automatic banner.",
             "profiles" => {
                 r#"Choose a workflow (listing profiles does not start capture):
   COMMAND      PROFILE / ALIAS   WHEN TO USE IT
