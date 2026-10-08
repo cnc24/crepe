@@ -119,6 +119,20 @@ fn packets(
 }
 pub(crate) fn run(cli: Cli) -> Result<()> {
     match cli.command {
+        Command::Correlate {
+            store,
+            window,
+            since_ms,
+            until_ms,
+        } => crate::investigation::correlate(&store, window, since_ms, until_ms),
+        Command::Evidence {
+            store,
+            event_id,
+            capture,
+            write,
+        } => {
+            crate::investigation::evidence(&store, &event_id, capture.as_deref(), write.as_deref())
+        }
         Command::Licenses => {
             use std::io::Write;
             let mut out = io::stdout().lock();
@@ -204,6 +218,9 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             since_ms,
         } => crate::history::print_json(&crepe_storage::compact(&store, &output, since_ms)?),
         Command::Trace { store, flow_id } => {
+            if crepe_storage::schema_version(&store)? == 1 {
+                crate::report!("Legacy schema-1 trace: flow_id groups endpoint tuples, not unique connection instances. Reimport the original capture into a NEW store for instance-level traces.");
+            }
             if flow_id.len() != 64 || !flow_id.bytes().all(|b| b.is_ascii_hexdigit()) {
                 return Err(crepe_core::Error::new(
                     "CREPE-CQL-001",

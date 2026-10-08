@@ -29,6 +29,32 @@ pub fn configure(mut command: Command) -> Command {
         .collect();
     for name in names {
         let extra = match name.as_str() {
+            "correlate" => r#"Examples:
+  crepe forensics incident.pcap --store ./case
+  crepe correlate ./case --window 300
+  crepe correlate ./case --since-ms 1700000000000 --until-ms 1700000300000
+
+Schema-2 stores only. Reads fewer than 10,000 DNS/TLS/Intel observations (16 MiB
+maximum); narrow the time interval if needed. Time bounds apply to BOTH DNS and
+TLS observations, so include preceding DNS answers. Results are JSON Lines.
+Direct A/AAAA answers must match visible SNI, TLS destination, client, sensor,
+source and link context, within DNS TTL and --window seconds. Repeated candidates
+are marked ambiguous; missing evidence produces unmatched results. These are
+inferred relationships, not proof of causality. No cross-capture, CNAME-chain or
+encrypted-name guesses. Use evidence STORE EVENT_ID --capture FILE for a packet."#,
+            "evidence" => r#"Examples:
+  crepe query ./case 'event.type == intel.match | select event.id'
+  crepe evidence ./case EVENT_ID
+  crepe evidence ./case EVENT_ID --capture incident.pcap
+  crepe evidence ./case EVENT_ID --capture incident.pcap --write evidence.pcap
+
+EVENT_ID is the 64-character event_id, not flow_id. Follows notice/Intel parent
+references to one triggering packet, or a flow's first observed packet. This
+is not a complete stream export. Without --capture, availability is not checked.
+The original capture's content hash must match the stored source. Missing files
+are reported explicitly; unrelated files are refused. --write never overwrites.
+Live sources without a matching retained capture and legacy flow records may
+have no retrievable original packet. Metadata is not a substitute for raw bytes."#,
             "logo" => "Examples:\n  crepe logo\n  crepe logo > crepe-logo.txt\n\nPrints the mascot and wordmark using only ASCII, without colors or terminal escapes.\nThe interactive root help also shows the logo; --serious hides that automatic banner.",
             "profiles" => {
                 r#"Choose a workflow (listing profiles does not start capture):
@@ -114,7 +140,8 @@ or flows --store for flow-only history. The source capture is not copied."#
   crepe trace ./case FLOW_ID
 
 Replace FLOW_ID with a 64-character hexadecimal flow_id from query output,
-not the short CX- identifier in the packet-derived flow table. Trace prints
+not the short CX- identifier in the packet-derived flow table. Schema-2 flow_id
+identifies an observed instance; conversation.id groups the endpoint tuple. Trace prints
 chronological stored observations for that conversation as JSON Lines.
 A flow-only store has no application observations; create a fuller case with
 crepe forensics traffic.pcap --store ./case."#

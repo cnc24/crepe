@@ -300,3 +300,86 @@ fn concurrent_hot_journal_rotation_has_no_gaps_or_duplicates() {
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn legacy_schema_is_readable_but_never_silently_reinterpreted_or_upgraded() {
+    use datafusion::arrow::{datatypes::Schema, record_batch::RecordBatch};
+    use parquet::arrow::{arrow_reader::ParquetRecordBatchReaderBuilder, ArrowWriter};
+    use std::{fs::File, sync::Arc};
+    let root =
+        std::env::temp_dir().join(format!("crepe-legacy-schema-test-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    let mut writer = Writer::begin(&root, &identity(&["legacy-fixture"])).unwrap();
+    writer
+        .push(Row {
+            event_id: identity(&["old-event"]),
+            flow_id: "old-tuple".into(),
+            event_type: "packet".into(),
+            payload: "{}".into(),
+            ..Default::default()
+        })
+        .unwrap();
+    writer.commit().unwrap();
+    fn parts(path: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+        for entry in fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                parts(&path, out)
+            } else if path.extension().is_some_and(|e| e == "parquet") {
+                out.push(path)
+            }
+        }
+    }
+    let mut files = Vec::new();
+    parts(&root.join("data"), &mut files);
+    for path in files {
+        let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&path).unwrap())
+            .unwrap()
+            .build()
+            .unwrap();
+        let batches: Vec<_> = reader.map(|r| r.unwrap()).collect();
+        let old_schema = batches[0].schema();
+        let indexes: Vec<_> = old_schema
+            .fields()
+            .iter()
+            .enumerate()
+            .filter(|(_, f)| !["conversation_id", "identity_status"].contains(&f.name().as_str()))
+            .map(|(i, _)| i)
+            .collect();
+        let schema = Arc::new(Schema::new(
+            indexes
+                .iter()
+                .map(|&i| old_schema.field(i).clone())
+                .collect::<Vec<_>>(),
+        ));
+        let mut writer =
+            ArrowWriter::try_new(File::create(&path).unwrap(), schema.clone(), None).unwrap();
+        for b in batches {
+            writer
+                .write(
+                    &RecordBatch::try_new(
+                        schema.clone(),
+                        indexes.iter().map(|&i| b.column(i).clone()).collect(),
+                    )
+                    .unwrap(),
+                )
+                .unwrap();
+        }
+        writer.close().unwrap();
+    }
+    fs::write(root.join("schema.json"), "{\"schema_version\":1}").unwrap();
+    let mut result = vec![];
+    query(&root, "* | select flow.id", &mut result).unwrap();
+    assert!(String::from_utf8(result).unwrap().contains("old-tuple"));
+    assert_eq!(crepe_storage::schema_version(&root).unwrap(), 1);
+    assert!(Writer::begin(&root, &identity(&["new-import"]))
+        .err()
+        .unwrap()
+        .message
+        .contains("read-only"));
+    assert_eq!(
+        fs::read_to_string(root.join("schema.json")).unwrap(),
+        "{\"schema_version\":1}"
+    );
+    fs::remove_dir_all(root).unwrap();
+}

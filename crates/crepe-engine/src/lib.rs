@@ -1,5 +1,7 @@
 //! Bounded orchestration, stable observation identities and historical ingestion.
 mod config;
+pub mod correlation;
+mod identity_index;
 mod workers;
 pub use config::{Config, Profile};
 use crepe_core::{Error, PacketEvent, Result};
@@ -38,7 +40,8 @@ pub fn conversation(sensor: &str, source: &str, p: &PacketEvent) -> String {
 }
 fn packet_row(c: &Config, source: &str, p: &PacketEvent, kind: &str, payload: String) -> Row {
     let mut row = Row {
-        flow_id: conversation(&c.sensor, source, p),
+        conversation_id: conversation(&c.sensor, source, p),
+        identity_status: "unassigned".into(),
         sensor: c.sensor.clone(),
         source: source.into(),
         event_type: kind.into(),
@@ -60,6 +63,7 @@ struct Sink<'a, 'b> {
     config: &'a Config,
     source: &'a str,
     ordinal: u64,
+    identities: identity_index::Index,
     summary: Summary,
     seen: BTreeMap<String, String>,
     seen_bytes: usize,
@@ -204,6 +208,17 @@ impl Sink<'_, '_> {
         Ok(())
     }
 
+    fn packet(&mut self, p: &PacketEvent, anchor: Option<u64>) -> Result<()> {
+        self.identities.record(p, anchor);
+        if self.config.packets() {
+            let mut row = packet_row(self.config, self.source, p, "packet", json(p)?);
+            self.identities.apply(p, &mut row);
+            row.packets = Some(1);
+            row.bytes = Some(u64::from(p.header.original_len));
+            self.push(row)?;
+        }
+        Ok(())
+    }
     fn malformed(&mut self, header: &crepe_core::EventHeader, error: &Error) -> Result<()> {
         self.summary.malformed_packets += 1;
         self.summary.notices += 1;
@@ -236,7 +251,8 @@ impl Sink<'_, '_> {
         if kind == "anomaly" {
             self.summary.notices += 1;
         }
-        let row = packet_row(self.config, self.source, &event.packet, kind, json(&event)?);
+        let mut row = packet_row(self.config, self.source, &event.packet, kind, json(&event)?);
+        self.identities.apply(&event.packet, &mut row);
         self.push(row.clone())?;
         // A small observational policy: keep the first DNS answer per name and report changes.
         if self.config.notices {
@@ -289,7 +305,6 @@ impl Sink<'_, '_> {
 }
 /// Convert a flow to the historical schema with the same conversation identity as packet analysis.
 pub fn flow_row(sensor: &str, source: &str, mut f: crepe_flow::FlowRecord) -> Result<Row> {
-    f.flow_id = identity(&[sensor, source, &f.flow_id]);
     let key = crepe_flow::FlowKey {
         a: f.a.clone(),
         b: f.b.clone(),
@@ -298,12 +313,21 @@ pub fn flow_row(sensor: &str, source: &str, mut f: crepe_flow::FlowRecord) -> Re
         interface: f.interface,
         vlans: f.vlans.clone(),
     };
+    let conversation_id = identity(&[
+        sensor,
+        source,
+        &serde_json::to_string(&key).expect("serializable flow key"),
+    ]);
+    f.flow_id = identity_index::instance(&conversation_id, f.first_sequence);
     let mut row = Row {
-        flow_id: identity(&[
-            sensor,
-            source,
-            &serde_json::to_string(&key).expect("serializable flow key"),
-        ]),
+        flow_id: f.flow_id.clone(),
+        conversation_id,
+        identity_status: if f.first_sequence == 0 {
+            "unassigned"
+        } else {
+            "instance"
+        }
+        .into(),
         sensor: sensor.to_string(),
         source: source.into(),
         event_type: "flow.end".into(),
@@ -454,6 +478,7 @@ fn process_records(
         config,
         source,
         ordinal: 0,
+        identities: identity_index::Index::default(),
         summary: Summary::default(),
         seen: BTreeMap::new(),
         seen_bytes: 0,
@@ -522,15 +547,13 @@ fn process_records(
             Err(error) => return Err(error),
         };
         if let Some(p) = decoded {
-            if config.packets() {
-                let mut row = packet_row(config, source, &p, "packet", json(&p)?);
-                row.packets = Some(1);
-                row.bytes = Some(u64::from(p.header.original_len));
-                sink.push(row)?;
-            }
-            if config.flows() && p.header.timestamp_ns.is_some() {
+            let anchor = if config.flows() && p.header.timestamp_ns.is_some() {
                 flows.push(&p, |f| sink.flow(f))?;
-            }
+                flows.last_assignment()
+            } else {
+                None
+            };
+            sink.packet(&p, anchor)?;
         }
         if config.analysis() {
             if let Err(error) =
@@ -583,6 +606,7 @@ pub fn exported_row(
     flow: &crepe_collector::Flow,
 ) -> Result<Row> {
     let mut row = Row {
+        identity_status: "exported".into(),
         event_id: identity(&[sensor, source, &index.to_string()]),
         flow_id: identity(&[
             sensor,
@@ -650,6 +674,7 @@ mod tests {
             config: &config,
             source: "test",
             ordinal: 0,
+            identities: identity_index::Index::default(),
             summary: Summary::default(),
             seen: BTreeMap::new(),
             seen_bytes: 0,

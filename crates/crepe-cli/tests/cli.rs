@@ -1451,3 +1451,150 @@ fn flow_query_detection_and_option_diagnostics() {
     assert!(!r.status.success());
     assert!(String::from_utf8_lossy(&r.stderr).contains("--verbose"));
 }
+
+#[test]
+fn target_story_has_distinct_instances_correlation_and_verified_evidence() {
+    fn json_rows(bytes: &[u8]) -> Vec<serde_json::Value> {
+        String::from_utf8_lossy(bytes)
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect()
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("case");
+    let capture = fixture("fixtures/target-story.pcap");
+    let config = dir.path().join("intel.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "intel_feed = {}\n",
+            serde_json::to_string(&fixture("config/intel-example.jsonl").to_string_lossy())
+                .unwrap()
+        ),
+    )
+    .unwrap();
+    let ingest = cli()
+        .arg("ingest")
+        .arg(&capture)
+        .arg("--store")
+        .arg(&store)
+        .arg("--config")
+        .arg(&config)
+        .output()
+        .unwrap();
+    assert!(
+        ingest.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+    let query = cli()
+        .arg("query")
+        .arg(&store)
+        .arg("event.type == tls.client_hello")
+        .output()
+        .unwrap();
+    assert!(query.status.success());
+    let tls = json_rows(&query.stdout);
+    assert_eq!(tls.len(), 2);
+    assert_ne!(tls[0]["flow_id"], tls[1]["flow_id"]);
+    assert_eq!(tls[0]["conversation_id"], tls[1]["conversation_id"]);
+    for row in &tls {
+        assert_eq!(row["identity_status"], "instance");
+        let trace = cli()
+            .arg("trace")
+            .arg(&store)
+            .arg(row["flow_id"].as_str().unwrap())
+            .output()
+            .unwrap();
+        assert!(trace.status.success());
+        let rows = json_rows(&trace.stdout);
+        assert_eq!(
+            rows.iter()
+                .filter(|r| r["event_type"] == "tls.client_hello")
+                .count(),
+            1
+        );
+        assert_eq!(
+            rows.iter()
+                .filter(|r| r["event_type"] == "flow.end")
+                .count(),
+            1
+        );
+    }
+    let correlation = cli().arg("correlate").arg(&store).output().unwrap();
+    assert!(
+        correlation.status.success(),
+        "{}",
+        String::from_utf8_lossy(&correlation.stderr)
+    );
+    let relations = json_rows(&correlation.stdout);
+    assert_eq!(relations.len(), 2);
+    for r in &relations {
+        assert_eq!(r["status"], "inferred");
+        assert!(!r["intel_event_ids"].as_array().unwrap().is_empty());
+        assert_ne!(r["dns_flow_id"], r["tls_flow_id"]);
+    }
+    let id = relations[0]["intel_event_ids"][0].as_str().unwrap();
+    let reference = cli().arg("evidence").arg(&store).arg(id).output().unwrap();
+    assert!(reference.status.success());
+    assert_eq!(
+        json_rows(&reference.stdout)[0]["availability"],
+        "not_checked"
+    );
+    let out = dir.path().join("evidence.pcap");
+    let evidence = cli()
+        .arg("evidence")
+        .arg(&store)
+        .arg(id)
+        .arg("--capture")
+        .arg(&capture)
+        .arg("--write")
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert!(
+        evidence.status.success(),
+        "{}",
+        String::from_utf8_lossy(&evidence.stderr)
+    );
+    assert_eq!(json_rows(&evidence.stdout)[0]["availability"], "verified");
+    let replay = cli()
+        .arg("read")
+        .arg(&out)
+        .args(["--format", "json"])
+        .output()
+        .unwrap();
+    assert!(replay.status.success());
+    assert_eq!(json_rows(&replay.stdout).len(), 1);
+    let overwrite = cli()
+        .arg("evidence")
+        .arg(&store)
+        .arg(id)
+        .arg("--capture")
+        .arg(&capture)
+        .arg("--write")
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert!(!overwrite.status.success());
+    let unrelated = cli()
+        .arg("evidence")
+        .arg(&store)
+        .arg(id)
+        .arg("--capture")
+        .arg(fixture("example.pcap"))
+        .output()
+        .unwrap();
+    assert!(!unrelated.status.success());
+    assert!(String::from_utf8_lossy(&unrelated.stderr).contains("does not match"));
+    let missing = cli()
+        .arg("evidence")
+        .arg(&store)
+        .arg(id)
+        .arg("--capture")
+        .arg(dir.path().join("missing.pcap"))
+        .output()
+        .unwrap();
+    assert!(missing.status.success());
+    assert_eq!(json_rows(&missing.stdout)[0]["availability"], "missing");
+}

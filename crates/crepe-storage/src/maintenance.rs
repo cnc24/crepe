@@ -14,10 +14,13 @@ pub struct Compaction {
     pub retained: u64,
     pub discarded: u64,
 }
-/// Copy a quiescent schema-1 store to a new compacted store, preserving row IDs.
+/// Copy a quiescent schema-2 store to a new compacted store, preserving row IDs.
 /// Rows without timestamps are retained. Failed attempts remove only the new destination.
 pub fn compact(source: &Path, destination: &Path, since_ms: Option<i64>) -> Result<Compaction> {
     validate_root(source)?;
+    if super::schema_version(source)? != 2 {
+        return Err(super::err("schema-1 compaction requires the old release; reimport captures into a NEW schema-2 store to upgrade identity semantics"));
+    }
     let source_path = source.canonicalize().map_err(err)?;
     let parent = destination
         .parent()

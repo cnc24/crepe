@@ -25,3 +25,22 @@ not merely to this table or a version string. The original design's implementati
 sketches (file layout, parser library, nested configuration, CLI examples) are
 not all literal compatibility requirements; supported alternatives above retain
 the functional goals and keep the scope bounded.
+
+## 1.3.0 target-architecture milestone
+
+New schema-2 histories distinguish observed flow instances from tuple-level
+conversation IDs. A bounded packet ancestry index is shared by serial and live
+worker pipelines. Existing schema-1 histories remain read-only with original
+semantics; migration is an explicit reimport, not inference over old rows.
+
+`correlate` performs bounded, on-demand historical DNS-answer/TLS-SNI association
+with client/sensor/source/link/time/TTL checks, ambiguity labels and Intel event
+references. `evidence` follows source-event links and verifies a supplied original
+capture before locating/exporting one referenced packet. `fixtures/target-story.pcap`
+exercises the path, including tuple reuse.
+
+This does not complete the whole target: arbitrary cross-capture relationships,
+CNAME chains, automatic raw capture discovery/retention, complete reassembly-byte
+provenance, a unified CQL AST, composable profile dependency planning and the full
+CPL language remain future work. Clock uncertainty and unobserved TCP boundaries
+are explicitly not resolved by these commands.

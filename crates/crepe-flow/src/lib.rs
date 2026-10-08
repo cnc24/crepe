@@ -59,6 +59,9 @@ pub struct FlowRecord {
     pub schema_version: u16,
     pub event_type: EventType,
     pub flow_id: String,
+    /// Capture record anchoring this observed instance; zero means legacy/unknown.
+    #[serde(default)]
+    pub first_sequence: u64,
     pub a: Endpoint,
     pub b: Endpoint,
     pub proto: Protocol,
@@ -106,6 +109,7 @@ pub struct FlowTable {
     deadlines: BTreeSet<(i128, FlowKey)>,
     watermark: Option<i128>,
     next_id: u64,
+    last_assignment: Option<u64>,
     pub skipped_fragments: u64,
     pub skipped_other_protocols: u64,
 }
@@ -130,9 +134,14 @@ impl FlowTable {
             deadlines: BTreeSet::new(),
             watermark: None,
             next_id: 1,
+            last_assignment: None,
             skipped_fragments: 0,
             skipped_other_protocols: 0,
         })
+    }
+    /// Instance anchor assigned by the most recent push, including a closing packet.
+    pub fn last_assignment(&self) -> Option<u64> {
+        self.last_assignment
     }
     pub fn len(&self) -> usize {
         self.flows.len()
@@ -162,6 +171,7 @@ impl FlowTable {
         p: &PacketEvent,
         mut emit: impl FnMut(FlowRecord) -> Result<()>,
     ) -> Result<()> {
+        self.last_assignment = None;
         let now = p
             .header
             .timestamp_ns
@@ -205,9 +215,10 @@ impl FlowTable {
                     deadline: now,
                     reason: EndReason::Eof,
                     record: FlowRecord {
-                        schema_version: 2,
+                        schema_version: 3,
                         event_type: EventType::FlowEnd,
                         flow_id: format!("CX-{id:016x}"),
+                        first_sequence: p.header.sequence,
                         a: key.a.clone(),
                         b: key.b.clone(),
                         proto: key.proto,
@@ -229,6 +240,7 @@ impl FlowTable {
             );
         }
         let state = self.flows.get_mut(&key).unwrap();
+        self.last_assignment = Some(state.record.first_sequence);
         self.deadlines.remove(&(state.deadline, key.clone()));
         state.start = state.start.min(now);
         state.end = state.end.max(now);

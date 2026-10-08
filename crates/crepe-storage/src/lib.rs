@@ -25,12 +25,18 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
-const SCHEMA_VERSION: u16 = 1;
+const SCHEMA_VERSION: u16 = 2;
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Row {
     pub event_id: String,
     pub flow_id: String,
+    /// Tuple-level identity, distinct from a connection instance.
+    #[serde(default)]
+    pub conversation_id: String,
+    /// instance, unassigned, or exported; absent in legacy stores.
+    #[serde(default)]
+    pub identity_status: String,
     pub sensor: String,
     pub source: String,
     pub timestamp_ns: Option<String>,
@@ -78,6 +84,8 @@ fn schema() -> Arc<Schema> {
     Arc::new(Schema::new(vec![
         Field::new("event_id", DataType::Utf8, false),
         Field::new("flow_id", DataType::Utf8, false),
+        Field::new("conversation_id", DataType::Utf8, true),
+        Field::new("identity_status", DataType::Utf8, true),
         Field::new("sensor", DataType::Utf8, false),
         Field::new("source", DataType::Utf8, false),
         Field::new("timestamp_ns", DataType::Utf8, true),
@@ -120,6 +128,8 @@ fn batch(rows: &[Row]) -> Result<RecordBatch> {
         vec![
             strings!(event_id),
             strings!(flow_id),
+            strings!(conversation_id),
+            strings!(identity_status),
             strings!(sensor),
             strings!(source),
             optional!(timestamp_ns),
@@ -139,14 +149,23 @@ fn batch(rows: &[Row]) -> Result<RecordBatch> {
     )
     .map_err(err)
 }
-fn validate_root(root: &Path) -> Result<()> {
+pub fn schema_version(root: &Path) -> Result<u16> {
     let data = fs::read(root.join("schema.json")).map_err(err)?;
     if data.len() > 4096 {
         return Err(err("manifest size limit"));
     }
     let manifest: Manifest = serde_json::from_slice(&data).map_err(err)?;
-    if manifest.schema_version != SCHEMA_VERSION {
+    if ![1, SCHEMA_VERSION].contains(&manifest.schema_version) {
         return Err(err("unsupported store schema; explicit migration required"));
+    }
+    Ok(manifest.schema_version)
+}
+fn validate_root(root: &Path) -> Result<()> {
+    schema_version(root).map(|_| ())
+}
+fn validate_writable(root: &Path) -> Result<()> {
+    if schema_version(root)? != SCHEMA_VERSION {
+        return Err(err("schema-1 history is read-only: reimport original captures into a NEW schema-2 store; old tuple IDs cannot be safely migrated into connection instances"));
     }
     Ok(())
 }
@@ -241,7 +260,7 @@ impl Writer {
         let destination = root.join("data").join(id);
         let result = (|| {
             if root.join("schema.json").exists() {
-                validate_root(root)?
+                validate_writable(root)?
             } else {
                 let temp = root.join(".schema.tmp");
                 let mut f = File::create(&temp).map_err(err)?;

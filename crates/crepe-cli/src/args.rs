@@ -99,6 +99,33 @@ pub(crate) struct FlowArgs {
 }
 #[derive(Subcommand)]
 pub(crate) enum Command {
+    /// Relate stored DNS answers to TLS ClientHello observations with explicit evidence.
+    Correlate {
+        /// Schema-2 history directory; narrow large selections with time bounds.
+        store: PathBuf,
+        /// Maximum DNS-to-TLS delay in seconds, also bounded by each answer's TTL.
+        #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..=3600))]
+        window: u64,
+        /// Inclusive lower capture-time bound, Unix milliseconds.
+        #[arg(long, allow_hyphen_values = true)]
+        since_ms: Option<i64>,
+        /// Inclusive upper capture-time bound, Unix milliseconds.
+        #[arg(long, allow_hyphen_values = true)]
+        until_ms: Option<i64>,
+    },
+    /// Locate a stored event's referenced/anchor packet in a verified original capture.
+    Evidence {
+        /// Existing history directory.
+        store: PathBuf,
+        /// 64-character event_id, including an Intel/notice event.
+        event_id: String,
+        /// Original PCAP/PCAPNG; its content hash must match the stored source.
+        #[arg(long)]
+        capture: Option<PathBuf>,
+        /// Export the referenced packet to a NEW PCAP file.
+        #[arg(long, requires = "capture")]
+        write: Option<PathBuf>,
+    },
     /// Print the Crepe mascot and wordmark as plain ASCII.
     Logo,
     /// Print the embedded project license and third-party notices (also retained by self-updates).

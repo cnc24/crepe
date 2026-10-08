@@ -28,7 +28,9 @@ describe the same workflow.
 | `profiles` | — | List recipes and descriptions |
 | `ingest FILE --store DIR` | — | Import into persistent history; `--profile`, `--sensor`, `--config` |
 | `query DIR [CQL]` | — | Query stored observations; default `*`, JSON Lines output |
-| `trace DIR FLOW_ID` | — | Stored observations for a conversation |
+| `trace DIR FLOW_ID` | — | Stored observations for an observed connection instance (schema 2) |
+| `correlate DIR` | — | Infer DNS/TLS relationships; `--window SECONDS`, `--since-ms`, `--until-ms` |
+| `evidence DIR EVENT_ID` | — | Locate original packet evidence; `--capture FILE`, `--write NEW_PCAP` |
 | `timeline DIR --limit N` | — | Chronological stored observations |
 | `collect` | `banane` | Receive NetFlow v5/v9/IPFIX; `--listen IP:PORT`, `--duration SECONDS`, `--count N`, `--store DIR`, `--sensor NAME` |
 | `update [--check] [--output NEW_PATH]` | — | Check/install the latest stable official archive; see update instructions below |
@@ -224,7 +226,7 @@ See [the tool comparison](COMPARISON.md) for Zeek/SiLK and
 
 The user-facing executable is **`crepe`**. Cargo is Rust's build manager and is
 needed only for a source build or update. Ready-made binaries are available in
-[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.4); Getting started
+[Releases](https://github.com/cnc24/crepe/releases/tag/v1.3.0); Getting started
 covers both binary and source installation.
 Run the following examples from the cloned repository root, where `example.pcap`
 and `fixtures/` are supplied synthetic test data:
@@ -558,7 +560,8 @@ uses the tar archive. These scripts do not change repository visibility.
 Back up the store's `schema.json` and `data/` together before replacing the
 binary. Stop writers, install the new binary, and run a count/timeline query
 before restarting capture. This revision continues to read schema 1 stores;
-it adds event kinds without rewriting old rows. A future unsupported schema
+but schema-1 stores are read-only from 1.3.0. Reimport original captures into a
+NEW directory for schema-2 instance IDs; no in-place conversion is inferred. A future unsupported schema
 fails with `CREPE-STORE-001`; never edit the manifest to bypass that check.
 Plugins declare `api_version = 1` in their JSON manifest and receive the
 versioned row envelope documented in `plugins/api.wit` and SCHEMA.md.
@@ -894,8 +897,10 @@ all generated records remain stored independently of output limits. Query output
 waits until capture processing/commit completes.
 
 Flow-only stores contain `flow.end` observations. Their 64-character historical
-`flow_id` uses the same sensor/source/link-scoped conversation identity as
-`forensics`/`inspect`, enabling trace correlation. A flow-only store cannot expose
+`flow_id` uses an observed-instance anchor plus sensor/source/link-scoped tuple
+identity, as in `forensics`/`inspect`. Matching input, filters and flow boundaries
+produce matching instance IDs; packet prefilters/timeouts/evictions can change
+those boundaries. `conversation.id` groups the tuple separately. A flow-only store cannot expose
 DNS/TLS/HTTP observations that were never stored; use `forensics FILE --store CASE`
 for that. `trace` correlates by this identity, not by arbitrary SQL joins or the
 short `CX-...` IDs in standalone flow details. Flow queries on a mixed case store
@@ -946,3 +951,52 @@ selects packet filtering. Existing-store input rejects packet-filter syntax,
 flow capacity and timeout options, including explicitly supplied default values.
 Use `--group src.ip --sort flows` to sort grouped flow counts, or
 `--sort packets` / `--sort bytes` to rank individual flow records.
+
+## Connection identity and evidence (1.3.0)
+
+New histories use schema 2. `flow.id` identifies the observed flow instance;
+`conversation.id` groups the endpoint tuple within a sensor/source/link context.
+Two closed connections reusing the same tuple therefore have distinct flow IDs.
+These are passive boundaries, not a claim that every endpoint TCP state is known.
+`identity.status == unassigned` means there was insufficient retained information
+for an instance assignment, for example fragments or expired ancestry mappings.
+
+```sh
+crepe forensics fixtures/target-story.pcap --store ./case-v2
+crepe query ./case-v2 'event.type == tls.client_hello | select event.id,flow.id,conversation.id'
+crepe correlate ./case-v2 --window 300
+crepe trace ./case-v2 FLOW_ID
+crepe evidence ./case-v2 EVENT_ID --capture fixtures/target-story.pcap
+crepe evidence ./case-v2 EVENT_ID --capture fixtures/target-story.pcap --write evidence.pcap
+```
+
+Replace IDs with the 64-character values printed by queries/correlation. The
+included fixture has one DNS answer and two TLS connections reusing endpoints.
+To include Intel findings, configure `intel_feed` (see Security above).
+
+Correlation checks direct A/AAAA DNS answers against visible TLS SNI, destination
+IP, client, sensor, capture source and link context. DNS must precede TLS inside
+both the answer's TTL and the configured time window. Output labels a unique
+candidate `inferred`, several candidates `ambiguous`, and no supported match
+`unmatched`; it never asserts causality. It includes source event/flow IDs and
+related Intel event IDs. CNAME chains, different sources, unknown capture-clock
+accuracy and hidden SNI/ECH are not guessed. At most 9,999 selected observations,
+16 MiB and 10,000 results are accepted; a limit is an error, not silent truncation.
+Time bounds select both DNS and TLS rows: include earlier DNS answers when choosing
+`--since-ms`. This is an on-demand historical investigation, not a streaming
+correlation rule or a persisted new event batch.
+
+Evidence follows Intel/notice source-event references to a referenced packet or
+a flow's first record. Without `--capture` it reports `not_checked`. With the
+original file it verifies the content hash and exact record/section/interface.
+A missing original is `missing`; an unrelated hash is an error. Export uses a
+new file and publishes only after successful writing. One referenced packet is
+not the full set of segments used for reassembly. Live session identities and
+exporter telemetry may have no retrievable capture. Metadata survives independently
+and must not be presented as raw evidence.
+
+Schema-1 stores remain queryable with their old tuple IDs; trace warns about their
+meaning. Import/compaction into or from a legacy store cannot silently promote
+those IDs. Keep old stores, stop their writers, and reimport available captures
+into a new path. If raw captures no longer exist, keep the legacy history and its
+limitations. Do not edit `schema.json` to pretend the store has been migrated.

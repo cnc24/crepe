@@ -37,10 +37,13 @@ the CLI owns the socket, wall-clock deadline, cancellation and diagnostics.
 Parquet and DataFusion are confined to storage. Plugin execution is isolated in its own optional crate; the engine supplies only
 observation envelopes. There is no HTTP server or background daemon in these libraries.
 
-The historical `flow_id` is an explicit conversation correlation key. It
-supports packet/analysis/flow timelines within a source. Payload flow instance
-IDs and event IDs distinguish repeated connections. See SCHEMA.md for exact
-identity scope; cross-sensor/time-window attribution is not guessed.
+Schema-2 historical `flow_id` is an observed flow-instance identity anchored to
+a capture record; `conversation_id` keeps the endpoint-tuple grouping separately.
+A bounded packet ancestry index applies the same identity to associated L7 events.
+Schema-1 stores retain their original tuple semantics and remain read-only.
+The engine's correlation module relates direct DNS answers and visible TLS SNI
+using explicit context/TTL/time constraints. The CLI retrieves source-event chains
+and verifies capture content hashes before exporting a referenced packet.
 
 
 Live worker orchestration is confined to `crepe-engine/src/workers.rs`.

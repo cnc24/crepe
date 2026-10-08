@@ -6,7 +6,8 @@ be added. Consumers must ignore unknown fields/kinds and inspect
 `schema_version`. Rust crates are workspace implementation APIs and are not
 published to crates.io as a stable external SDK.
 
-Packet/flow JSON uses schema 2 inherited from the prototype. Application JSON
+Packet JSON uses schema 2. Flow JSON uses schema 3 from 1.3.0, adding
+`first_sequence`: the original capture-record anchor of an observed flow instance. Application JSON
 uses schema 1, with `packet`, `dns`, `protocol`, `anomaly`, `midstream` and
 `reassembled`. `event_type` is `dns.query`, `dns.response`, `protocol` or
 `anomaly`; the tagged `protocol.type` distinguishes TLS, HTTP and SSH events.
@@ -15,11 +16,12 @@ Its packet header identifies the completing capture record. Reconstructed
 application payload is not a captured-wire packet and is not used to inflate
 wire counters.
 
-Historical store schema 1 is Arrow/Parquet with these columns:
+Historical store schema 2 (new stores from 1.3.0) is Arrow/Parquet with these columns:
 
 | Columns | Type / meaning |
 | --- | --- |
 | event_id, flow_id, sensor, source, event_type | Non-null UTF-8 |
+| conversation_id, identity_status | UTF-8 in schema 2; nullable when reading legacy schema 1 |
 | timestamp_ns | Nullable UTF-8 decimal Unix nanoseconds, lossless |
 | timestamp_ms | Nullable signed 64-bit Unix milliseconds for queries |
 | src_ip, dst_ip, proto | Nullable UTF-8 |
@@ -29,14 +31,29 @@ Historical store schema 1 is Arrow/Parquet with these columns:
 `event_id` is BLAKE3 over length-prefixed sensor, source identity, ordinal.
 Capture source is the content hash; exporter source is a unique collection
 session identity. Stable same-input/sensor/profile imports reproduce event
-IDs across processes/stores. `flow_id` in historical rows is a **conversation
-correlation ID** over canonical bidirectional endpoints/protocol/link scope,
-sensor and capture source. A reused tuple within one capture remains one
-trace; distinct `flow.end` rows retain stable sensor/source/instance hashes in payload and
-have unique event IDs. It is not a global connection identifier across
-unrelated capture files. Collector conversation IDs include exporter/domain;
-packet-derived and exporter-derived flows are not automatically declared
-identical merely because a 5-tuple matches.
+IDs across processes/stores for the same implementation and serial input order.
+In schema 2, `conversation_id` hashes sensor, source and the canonical
+bidirectional endpoint/protocol/link key. `flow_id` hashes that tuple identity
+plus the first capture record assigned by bounded flow accounting, with a
+versioned domain separator. Closing packets retain the assigned instance.
+Serial and affinity-worker pipelines use the same anchor and identity function.
+This is an **observed flow instance**, not proof of endpoint TCP state. Flow
+idle/active timeouts, capacity eviction and observed FIN/RST define boundaries;
+unobserved closes and reused tuples without an observed boundary remain uncertain.
+
+`identity_status` is `instance`, `unassigned` or `exported`. Missing timestamps,
+fragment-only packet paths, packet-only profiles and expired ancestry mappings
+can leave `flow_id` empty (`unassigned`); the engine does not guess a connection.
+The packet-to-instance ancestry index retains at most 65,536 record mappings.
+`conversation.id` and `identity.status` are query aliases for the new columns.
+Exporter IDs retain exporter/domain provenance and are not declared identical to
+packet-derived instances based only on a matching tuple.
+
+Schema-1 stores remain readable with their ORIGINAL tuple-level `flow_id`
+semantics and null new columns. Trace warns about this distinction. They are
+read-only in 1.3.0: imports and compaction cannot silently upgrade them. Reimport
+original captures into a NEW store for schema-2 identities. Without originals,
+retain the old store and its known limitations; do not manufacture instance IDs.
 
 Counts depend on event type. Packet rows have 1 and wire bytes; flow.end rows
 have bidirectional captured counters; flow.export has exporter counters;
@@ -70,6 +87,12 @@ Packet CQL remains its typed packet predicate grammar with CIDR and port
 lists. Historical CQL also supports CIDR membership and port lists.
 
 ## Stable diagnostic code families
+
+`CREPE-EVIDENCE-001` covers invalid/unavailable evidence requests and bounded
+investigation selections; `CREPE-CORRELATE-001` covers correlation input/budget
+failures. Both use exit 1. Missing evidence without an export request is a JSON
+availability result; hash mismatches and failed exports are errors.
+
 
 `CREPE-CLI-001` invalid CLI; `CREPE-CQL-001` invalid query (exit 2).
 `CREPE-CONFIG-001`, `CREPE-STORE-001`, `CREPE-ENGINE-001` configuration,
@@ -135,11 +158,11 @@ Ordinary history queries can include complete provisional rows from the active
 bounded live journal. Their event IDs remain unchanged at checkpoint. A crash
 or failed session can discard that tail; committed Parquet rows are durable.
 Atomic offline imports remain invisible until commit. All published batches
-and any provisional snapshot use the same Arrow schema 1.
+and any provisional snapshot use the same Arrow schema 2 in new stores.
 
 ## Raw packet/link CLI output (1.2.3)
 
-The historical schema described above is unchanged. Raw `read`/`capture` JSON now
+The 1.2.3 raw-output extension did not change historical storage. Raw `read`/`capture` JSON
 also includes non-IP link records: capture header, linktype, optional source and
 destination MAC, EtherType, VLAN IDs, protocol and textual details. Such records
 have no `src`/`dst` IP endpoint. Existing IP packet JSON is unchanged. Packet CSV

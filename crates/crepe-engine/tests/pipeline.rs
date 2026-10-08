@@ -246,3 +246,51 @@ fn parallel_workers_preserve_reassembly_counts_and_stop_on_sink_failure() {
     .unwrap_err();
     assert_eq!(error.code, "CREPE-IO-002");
 }
+
+#[test]
+fn instance_identity_is_consistent_across_serial_and_affinity_workers() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/target-story.pcap");
+    let source = crepe_storage::hash_file(&path).unwrap();
+    let mut cases = Vec::new();
+    for workers in [1, 2, 4] {
+        let config = Config {
+            workers,
+            ..Default::default()
+        };
+        let mut rows = Vec::new();
+        crepe_engine::stream(
+            &source,
+            None,
+            &config,
+            |emit| crepe_capture::read_records(crepe_capture::open(&path)?, emit),
+            &mut |row| {
+                rows.push(row.clone());
+                Ok(())
+            },
+        )
+        .unwrap();
+        let mut ids = std::collections::BTreeMap::new();
+        for row in rows {
+            if !["packet", "tls.client_hello", "flow.end"].contains(&row.event_type.as_str()) {
+                continue;
+            }
+            let payload: serde_json::Value = serde_json::from_str(&row.payload).unwrap();
+            let sequence = payload
+                .pointer("/header/sequence")
+                .or_else(|| payload.pointer("/packet/header/sequence"))
+                .or_else(|| payload.get("first_sequence"))
+                .unwrap()
+                .as_u64()
+                .unwrap();
+            assert_eq!(row.identity_status, "instance");
+            ids.insert((row.event_type, sequence), row.flow_id);
+        }
+        cases.push(ids);
+    }
+    assert_eq!(cases[0], cases[1]);
+    assert_eq!(cases[0], cases[2]);
+    assert_ne!(
+        cases[0][&("tls.client_hello".into(), 4)],
+        cases[0][&("tls.client_hello".into(), 7)]
+    );
+}

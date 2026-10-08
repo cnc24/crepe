@@ -1,5 +1,5 @@
 //! Bounded live workers. IP-pair affinity keeps both directions and all fragments together.
-use super::{json, packet_row, Config, Input, Sink};
+use super::{Config, Input, Sink};
 use crepe_core::{Error, EventHeader, PacketEvent, Result};
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
 struct Packet {
@@ -12,7 +12,7 @@ enum Work {
     Tick(i128),
 }
 enum Output {
-    Packet(Box<PacketEvent>),
+    Packet(Box<PacketEvent>, Option<u64>),
     Flow(Box<crepe_flow::FlowRecord>),
     Analysis(Box<crepe_analysis::Event>),
     Malformed(EventHeader, Error),
@@ -88,12 +88,13 @@ fn worker(
                     Err(error) => return Err(error),
                 };
                 if let Some(packet) = decoded {
-                    if config.packets() {
-                        send(Output::Packet(Box::new(packet.clone())))?;
-                    }
-                    if config.flows() && packet.header.timestamp_ns.is_some() {
+                    let anchor = if config.flows() && packet.header.timestamp_ns.is_some() {
                         flows.push(&packet, |flow| send(Output::Flow(Box::new(flow))))?;
-                    }
+                        flows.last_assignment()
+                    } else {
+                        None
+                    };
+                    send(Output::Packet(Box::new(packet), anchor))?;
                 }
                 if config.analysis() {
                     if let Err(error) = analyzer.process(
@@ -127,12 +128,7 @@ fn worker(
 }
 fn accept(value: Result<Output>, sink: &mut Sink<'_, '_>) -> Result<()> {
     match value? {
-        Output::Packet(packet) => {
-            let mut row = packet_row(sink.config, sink.source, &packet, "packet", json(&packet)?);
-            row.packets = Some(1);
-            row.bytes = Some(u64::from(packet.header.original_len));
-            sink.push(row)
-        }
+        Output::Packet(packet, anchor) => sink.packet(&packet, anchor),
         Output::Flow(flow) => sink.flow(*flow),
         Output::Analysis(event) => sink.analysis(*event),
         Output::Malformed(header, error) => sink.malformed(&header, &error),

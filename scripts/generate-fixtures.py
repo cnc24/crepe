@@ -111,6 +111,12 @@ if __name__ == '__main__':
     for port, payload in [(443,tls),(80,b'GET /research HTTP/1.1\r\nHost: example.test\r\n\r\n'),(22,b'SSH-2.0-CrepeFixture\r\n')]:
         app_packets += [frame(4,6,50000+port,port,sequence=100),frame(4,6,50000+port,port,sequence=109,flags=16,payload=payload[8:]),frame(4,6,50000+port,port,sequence=101,flags=16,payload=payload[:8])]
     files['protocols.pcap'] = pcap(packets=app_packets)
+    # One DNS answer followed by two distinct TLS connections reusing the tuple.
+    story_response = s.pack('!HHHHHH', 0x1234, 0x8180, 1, 1, 0, 0) + query[12:] + bytes.fromhex('c00c') + s.pack('!HHIH', 1, 1, 60, 4) + bytes([198,51,100,20])
+    story = [frame(4,17,53000,53,payload=query), frame(4,17,53000,53,reverse=True,payload=story_response)]
+    for seq in [100,1000]:
+        story += [frame(4,6,50443,443,sequence=seq), frame(4,6,50443,443,sequence=seq+1,flags=24,payload=tls), frame(4,6,50443,443,reverse=True,flags=4)]
+    files['target-story.pcap'] = pcap(packets=story)
     fragments = []
     for version in [4,6]:
         full = frame(version,17,53000,53,payload=query)

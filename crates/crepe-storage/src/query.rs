@@ -7,6 +7,8 @@ fn field(s: &str) -> Result<&'static str> {
     match s {
         "event.id" | "event_id" => Ok("event_id"),
         "flow.id" | "flow_id" => Ok("flow_id"),
+        "conversation.id" | "conversation_id" => Ok("conversation_id"),
+        "identity.status" | "identity_status" => Ok("identity_status"),
         "sensor" => Ok("sensor"),
         "source" => Ok("source"),
         "time" | "timestamp" | "timestamp_ms" => Ok("timestamp_ms"),

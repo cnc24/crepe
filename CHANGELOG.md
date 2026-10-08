@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0 — 2026-10-08
+
+- Introduce schema-2 history with observed-instance `flow_id`, tuple-level `conversation_id` and explicit assignment status; retain read-only access to schema-1 stores. Upgrade by reimporting original captures into a new store.
+- Preserve instance identity across serial and affinity-worker pipelines using capture-record anchors; flow JSON schema 3 adds `first_sequence`.
+- Add bounded `correlate` for evidence-based DNS/TLS associations with TTL, context, ambiguity and Intel references.
+- Add `evidence` to follow source events, verify original capture hashes and export a referenced packet without overwriting existing files.
+- Add a synthetic target-story capture and regression tests for tuple reuse, worker identity consistency, old-store compatibility, correlation counterexamples and evidence verification.
+
 ## 1.2.4 — 2026-10-08
 
 - Finish durable flow imports when downstream stdout closes (for example `--store history | head`).

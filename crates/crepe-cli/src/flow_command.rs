@@ -35,6 +35,8 @@ fn is_query(text: &str) -> bool {
                 matches!(word, "bytes" | "packets" | "where")
                     || word.starts_with("flow.")
                     || word.starts_with("event.")
+                    || word.starts_with("conversation.")
+                    || word.starts_with("identity.")
             })
 }
 pub fn run(args: FlowArgs) -> Result<()> {

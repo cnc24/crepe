@@ -5,6 +5,7 @@ mod flow_command;
 mod flow_display;
 mod help;
 mod history;
+mod investigation;
 mod link_display;
 #[cfg(feature = "live")]
 mod live;
