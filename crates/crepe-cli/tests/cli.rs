@@ -1323,3 +1323,131 @@ fn flow_database_and_direct_queries_use_the_same_rows_and_grammar() {
         assert!(text.contains(phrase), "{phrase}");
     }
 }
+
+#[test]
+fn flow_import_survives_closed_output_pipe() {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    let dir = tempfile::tempdir().unwrap();
+    let capture = dir.path().join("many.pcap");
+    let original = std::fs::read(fixture("fixtures/flows.pcap")).unwrap();
+    let mut bytes = original[..24].to_vec();
+    for _ in 0..2000 {
+        bytes.extend_from_slice(&original[24..]);
+    }
+    std::fs::write(&capture, bytes).unwrap();
+    let baseline = cli()
+        .arg("flows")
+        .arg(&capture)
+        .args(["--count", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(
+        baseline.status.success(),
+        "{}",
+        String::from_utf8_lossy(&baseline.stderr)
+    );
+    let store = dir.path().join("store");
+    let mut child = cli()
+        .arg("flows")
+        .arg(&capture)
+        .arg("--store")
+        .arg(&store)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut output = BufReader::new(child.stdout.take().unwrap());
+    let mut line = String::new();
+    output.read_line(&mut line).unwrap();
+    drop(output); // Like `head`: close before the writer's next flush.
+    let finished = child.wait_with_output().unwrap();
+    assert!(
+        finished.status.success(),
+        "{}",
+        String::from_utf8_lossy(&finished.stderr)
+    );
+    assert!(String::from_utf8_lossy(&finished.stderr).contains("Saved"));
+    let query = cli()
+        .arg("query")
+        .arg(&store)
+        .arg("* | count")
+        .output()
+        .unwrap();
+    assert!(query.status.success());
+    assert_eq!(query.stdout, baseline.stdout);
+    let result: serde_json::Value = serde_json::from_slice(&query.stdout).unwrap();
+    assert!(result["count"].as_u64().unwrap() > 1000);
+}
+
+#[test]
+fn flow_query_detection_and_option_diagnostics() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("flows");
+    let created = cli()
+        .arg("flows")
+        .arg(fixture("fixtures/flows.pcap"))
+        .arg("--store")
+        .arg(&store)
+        .output()
+        .unwrap();
+    assert!(created.status.success());
+    for query in [
+        "(bytes > 0)",
+        "!(packets == 0)",
+        "proto == tcp && (bytes > 0)",
+    ] {
+        let direct = cli()
+            .arg("flows")
+            .arg(fixture("fixtures/flows.pcap"))
+            .arg(query)
+            .args(["--format", "json"])
+            .output()
+            .unwrap();
+        let explicit = cli()
+            .arg("flows")
+            .arg(fixture("fixtures/flows.pcap"))
+            .args(["--query", query, "--format", "json"])
+            .output()
+            .unwrap();
+        assert!(
+            direct.status.success(),
+            "{}",
+            String::from_utf8_lossy(&direct.stderr)
+        );
+        assert!(explicit.status.success());
+        assert_eq!(direct.stdout, explicit.stdout);
+    }
+    for options in [
+        ["--tcp-idle", "120"],
+        ["--udp-idle", "30"],
+        ["--max-flows", "65536"],
+        ["--active-timeout", "300"],
+        ["--filter-syntax", "auto"],
+    ] {
+        let r = cli()
+            .arg("flows")
+            .arg(&store)
+            .args(options)
+            .output()
+            .unwrap();
+        assert!(!r.status.success());
+        assert!(String::from_utf8_lossy(&r.stderr).contains("not an existing store"));
+    }
+    let r = cli()
+        .arg("flows")
+        .arg(fixture("fixtures/flows.pcap"))
+        .args(["--sort", "flows"])
+        .output()
+        .unwrap();
+    assert!(!r.status.success());
+    assert!(String::from_utf8_lossy(&r.stderr).contains("--group"));
+    let r = cli()
+        .arg("read")
+        .arg(fixture("example.pcap"))
+        .args(["-v", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(!r.status.success());
+    assert!(String::from_utf8_lossy(&r.stderr).contains("--verbose"));
+}

@@ -5,6 +5,7 @@ use crepe_core::Result;
 
 pub(crate) struct Filter {
     cql: Option<crepe_query::Expr>,
+    needs_application: bool,
     application: Option<String>,
     link: Option<String>,
     #[cfg(feature = "live")]
@@ -14,6 +15,7 @@ impl Filter {
     pub fn new(expression: Option<&str>, syntax: FilterSyntax) -> Result<Self> {
         let mut result = Self {
             cql: None,
+            needs_application: false,
             application: None,
             link: None,
             #[cfg(feature = "live")]
@@ -62,7 +64,9 @@ impl Filter {
         let is_cql = matches!(syntax, FilterSyntax::Cql)
             || (matches!(syntax, FilterSyntax::Auto) && cql_fields);
         if is_cql {
-            result.cql = Some(crepe_query::parse(expression)?);
+            let expr = crepe_query::parse(expression)?;
+            result.needs_application = expr.needs_application();
+            result.cql = Some(expr);
         } else {
             #[cfg(feature = "live")]
             {
@@ -90,7 +94,14 @@ impl Filter {
     pub fn view_matches(&self, view: &crepe_packet::PacketView<'_>) -> bool {
         self.link.is_none()
             && self.cql.as_ref().is_none_or(|e| {
-                e.matches_application(&view.event, crate::application::protocol(view))
+                e.matches_application(
+                    &view.event,
+                    if self.needs_application {
+                        crate::application::protocol(view)
+                    } else {
+                        None
+                    },
+                )
             })
             && self
                 .application

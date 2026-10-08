@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 1.2.4 — 2026-10-08
+
+- Finish durable flow imports when downstream stdout closes (for example `--store history | head`).
+- Recognize parenthesized/negated historical flow predicates and reject capture-only options on existing stores.
+- Explain count sorting prerequisites and verbose/table format conflicts.
+- Report flow-import preparation, progress and commit stages on stderr.
+- Skip application recognition for pure endpoint/protocol packet CQL and avoid temporary stores for streaming-only flows.
 
 - Add the Crepe mascot to the README, plain ASCII `logo` command and interactive root-help banner.
 

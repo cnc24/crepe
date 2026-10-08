@@ -57,26 +57,27 @@ pub(crate) struct FlowArgs {
     pub file: PathBuf,
     /// Packet filter before aggregation; a pipeline or bytes/packets predicate is a flow query.
     pub filter: Option<String>,
-    #[arg(long, value_enum, default_value_t = FilterSyntax::Auto)]
-    pub filter_syntax: FilterSyntax,
+    /// Packet-filter grammar (default auto); not applicable to stored flow queries.
+    #[arg(long, value_enum)]
+    pub filter_syntax: Option<FilterSyntax>,
     /// Output encoding: readable table, JSON Lines, or CSV.
     #[arg(long, value_enum, default_value_t = Format::Table)]
     pub format: Format,
-    /// Maximum tracked flows; at capacity, emit the flow with the earliest deadline.
-    #[arg(long, default_value_t = 65536, value_parser = clap::value_parser!(u32).range(1..=1_000_000))]
-    pub max_flows: u32,
+    /// Maximum tracked flows (default 65536); at capacity, emit the flow with the earliest deadline.
+    #[arg(long, value_parser = clap::value_parser!(u32).range(1..=1_000_000))]
+    pub max_flows: Option<u32>,
     /// Show expanded directional counters, flags and end reasons instead of one row per flow.
     #[arg(long)]
     pub details: bool,
-    /// TCP inactivity timeout in capture-timestamp seconds.
-    #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..))]
-    pub tcp_idle: u64,
-    /// UDP inactivity timeout in capture-timestamp seconds.
-    #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..))]
-    pub udp_idle: u64,
-    /// Maximum flow lifetime in capture-timestamp seconds before emitting a record.
-    #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..))]
-    pub active_timeout: u64,
+    /// TCP inactivity timeout in capture-timestamp seconds (default 120).
+    #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
+    pub tcp_idle: Option<u64>,
+    /// UDP inactivity timeout in capture-timestamp seconds (default 30).
+    #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
+    pub udp_idle: Option<u64>,
+    /// Maximum flow lifetime in capture-timestamp seconds (default 300).
+    #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
+    pub active_timeout: Option<u64>,
     /// Persist all generated flow records into this historical store.
     #[arg(long)]
     pub store: Option<PathBuf>,

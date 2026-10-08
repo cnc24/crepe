@@ -368,3 +368,32 @@ impl Expr {
         }
     }
 }
+
+impl Expr {
+    /// Whether evaluation needs packet-local application recognition.
+    pub fn needs_application(&self) -> bool {
+        match self {
+            Self::Predicate(Predicate::Application(_)) => true,
+            Self::Predicate(_) => false,
+            Self::Not(e) => e.needs_application(),
+            Self::And(a, b) | Self::Or(a, b) => a.needs_application() || b.needs_application(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod application_requirement_tests {
+    #[test]
+    fn application_work_is_only_required_by_application_predicates() {
+        for expression in [
+            "dst.port == 443",
+            "!(tcp.port == 80) && ip.src == 192.0.2.10",
+            "proto == udp",
+        ] {
+            assert!(!super::parse(expression).unwrap().needs_application());
+        }
+        for expression in ["http", "!(dns || tls)", "dst.port == 443 && (http || ssh)"] {
+            assert!(super::parse(expression).unwrap().needs_application());
+        }
+    }
+}

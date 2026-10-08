@@ -14,16 +14,44 @@ fn error(e: impl std::fmt::Display) -> Error {
     Error::new("CREPE-CQL-001", e)
 }
 fn is_query(text: &str) -> bool {
-    let without_or = text.replace("||", "");
-    without_or.contains('|')
-        || text.trim() == "*"
-        || ["bytes", "packets", "flow.", "event.", "where "]
-            .iter()
-            .any(|prefix| text.trim_start().starts_with(prefix))
+    if text.trim() == "*" {
+        return true;
+    }
+    // Inspect identifiers outside quoted literals, regardless of parentheses/negation.
+    let mut quoted = false;
+    let mut visible = String::with_capacity(text.len());
+    for c in text.chars() {
+        if c == '"' {
+            quoted = !quoted;
+            visible.push(' ');
+        } else {
+            visible.push(if quoted { ' ' } else { c });
+        }
+    }
+    visible.replace("||", "").contains('|')
+        || visible
+            .split(|c: char| !c.is_ascii_alphanumeric() && c != '.' && c != '_')
+            .any(|word| {
+                matches!(word, "bytes" | "packets" | "where")
+                    || word.starts_with("flow.")
+                    || word.starts_with("event.")
+            })
 }
 pub fn run(args: FlowArgs) -> Result<()> {
     let stored = args.file.is_dir();
-    let positional_query = args.filter.as_deref().filter(|s| stored || is_query(s));
+    if stored
+        && (args.filter_syntax.is_some()
+            || args.max_flows.is_some()
+            || args.tcp_idle.is_some()
+            || args.udp_idle.is_some()
+            || args.active_timeout.is_some())
+    {
+        return Err(error("packet-filter syntax and flow timeouts/capacity apply only to capture input, not an existing store; use a historical CQL query"));
+    }
+    let positional_query = args.filter.as_deref().filter(|s| {
+        stored
+            || (!matches!(args.filter_syntax, Some(crate::args::FilterSyntax::Bpf)) && is_query(s))
+    });
     if positional_query.is_some() && args.query.is_some() {
         return Err(error(
             "use either a positional flow query or --query, not both",
@@ -60,7 +88,11 @@ pub fn run(args: FlowArgs) -> Result<()> {
     }
     if let Some(sort) = &args.sort {
         let sort = if sort == "flows" { "count" } else { sort };
-        query.push_str(&format!(" | sort {sort} desc"));
+        let sorted = format!("{query} | sort {sort} desc");
+        if sort == "count" && crepe_storage::compile(&sorted).is_err() {
+            return Err(error("--sort flows/count needs a count result: use --group src.ip (or a CQL group/count pipeline), then sort"));
+        }
+        query = sorted;
     }
     if let Some(limit) = args.limit {
         query.push_str(&format!(" | limit {limit}"));
@@ -72,20 +104,34 @@ pub fn run(args: FlowArgs) -> Result<()> {
     if stored {
         return display_query(&args.file, &query, args.format, args.details);
     }
-    let mut filter = Filter::new(packet_filter, args.filter_syntax)?;
+    let mut filter = Filter::new(
+        packet_filter,
+        args.filter_syntax
+            .unwrap_or(crate::args::FilterSyntax::Auto),
+    )?;
     let config = Config {
-        max_flows: args.max_flows as usize,
-        tcp_idle_secs: args.tcp_idle,
-        udp_idle_secs: args.udp_idle,
-        active_secs: args.active_timeout,
+        max_flows: args.max_flows.unwrap_or(65536) as usize,
+        tcp_idle_secs: args.tcp_idle.unwrap_or(120),
+        udp_idle_secs: args.udp_idle.unwrap_or(30),
+        active_secs: args.active_timeout.unwrap_or(300),
     };
     let mut table = FlowTable::new(config)?;
-    let temp = tempfile::tempdir().map_err(error)?;
+    let persist = querying || args.store.is_some();
+    let temp = if persist && args.store.is_none() {
+        Some(tempfile::tempdir().map_err(error)?)
+    } else {
+        None
+    };
     let store = args
         .store
         .clone()
-        .unwrap_or_else(|| temp.path().join("flows"));
-    let persist = querying || args.store.is_some();
+        .or_else(|| temp.as_ref().map(|t| t.path().join("flows")));
+    if persist {
+        crate::report!(
+            "Preparing flow import from {} (hashing source)...",
+            args.file.display()
+        );
+    }
     let source = if persist {
         crepe_storage::hash_file(&args.file)?
     } else {
@@ -99,24 +145,52 @@ pub fn run(args: FlowArgs) -> Result<()> {
         &format!("{config:?}"),
     ]);
     let mut writer = if persist {
-        Some(crepe_storage::Writer::begin(&store, &batch)?)
+        Some(crepe_storage::Writer::begin(
+            store.as_ref().expect("persistent destination"),
+            &batch,
+        )?)
     } else {
         None
     };
     let mut out = Output::new(io::BufWriter::new(io::stdout().lock()), args.format);
+    let mut output_closed = false;
     if !querying && (!args.details || !matches!(args.format, Format::Table)) {
-        out.header(true)?;
+        if let Err(e) = out.header(true) {
+            if persist && e.code == "CREPE-IO-PIPE" {
+                output_closed = true;
+            } else {
+                return Err(e);
+            }
+        }
     }
     let mut emit = |flow: FlowRecord| {
         if let Some(writer) = &mut writer {
             writer.push(crepe_engine::flow_row("local", &source, flow.clone())?)?;
         }
-        if !querying {
-            out.flow(&flow, args.details)?;
+        if !querying && !output_closed {
+            if let Err(e) = out.flow(&flow, args.details) {
+                if persist && e.code == "CREPE-IO-PIPE" {
+                    output_closed = true;
+                } else {
+                    return Err(e);
+                }
+            }
         }
         Ok(())
     };
+    let mut records = 0_u64;
+    let mut progress = std::time::Instant::now();
+    if persist {
+        crate::report!(
+            "Aggregating flows; results are committed after the complete capture is processed."
+        );
+    }
     crepe_capture::read_records(crepe_capture::open(&args.file)?, |record| {
+        records += 1;
+        if persist && progress.elapsed().as_secs() >= 2 {
+            crate::report!("Flow import: processed {records} capture records.");
+            progress = std::time::Instant::now();
+        }
         if !filter.raw_matches(&record)? {
             return Ok(true);
         }
@@ -137,20 +211,32 @@ pub fn run(args: FlowArgs) -> Result<()> {
             table.skipped_other_protocols
         );
     }
-    out.flush()?;
+    if let Err(e) = out.flush() {
+        if !(persist && e.code == "CREPE-IO-PIPE") {
+            return Err(e);
+        }
+    }
     // Release stdout before query output acquires its own lock.
     drop(out);
     if let Some(writer) = writer {
+        crate::report!(
+            "Verifying source and committing flow history ({records} records processed)..."
+        );
         if crepe_storage::hash_file(&args.file)? != source {
             return Err(error("input changed during flow import; batch discarded"));
         }
         let count = writer.commit()?;
         if args.store.is_some() {
-            crate::report!("Saved {count} flows to {}. Query with: crepe query STORE '* | sort bytes desc | limit 10' (replace STORE with this path).",store.display());
+            crate::report!("Saved {count} flows to {}. Query with: crepe query STORE '* | sort bytes desc | limit 10' (replace STORE with this path).",store.as_ref().expect("persistent destination").display());
         }
     }
     if querying {
-        display_query(&store, &query, args.format, args.details)?;
+        display_query(
+            store.as_ref().expect("query destination"),
+            &query,
+            args.format,
+            args.details,
+        )?;
     }
     Ok(())
 }

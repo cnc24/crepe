@@ -224,7 +224,7 @@ See [the tool comparison](COMPARISON.md) for Zeek/SiLK and
 
 The user-facing executable is **`crepe`**. Cargo is Rust's build manager and is
 needed only for a source build or update. Ready-made binaries are available in
-[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.3); Getting started
+[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.4); Getting started
 covers both binary and source installation.
 Run the following examples from the cloned repository root, where `example.pcap`
 and `fixtures/` are supplied synthetic test data:
@@ -930,3 +930,19 @@ The repository logo is in `assets/crepe-logo.jpg`; its plain ASCII counterpart i
 `assets/crepe-logo.txt`. Run `crepe logo` to print it, or redirect it to a text file.
 Interactive root help (`crepe -h`) includes the banner. `--serious` suppresses the
 automatic banner; redirected help and packet/JSON/CSV output do not include it.
+
+## Flow import reliability (1.2.4)
+
+`crepe flows traffic.pcap --store ./flows | head` still imports the entire capture:
+a closed stdout only stops display, not the explicitly requested durable import.
+Check the exit status and the `Saved ...` stderr message before querying the store.
+Without `--store`, closing a streaming display can stop processing early.
+Import preparation, periodic record counts and the verification/commit phase are
+reported on stderr; JSON/CSV stdout stays machine-readable.
+
+Historical predicates can be parenthesized or negated, for example
+`crepe flows traffic.pcap '(bytes > 1000)'`. Explicit `--filter-syntax bpf`
+selects packet filtering. Existing-store input rejects packet-filter syntax,
+flow capacity and timeout options, including explicitly supplied default values.
+Use `--group src.ip --sort flows` to sort grouped flow counts, or
+`--sort packets` / `--sort bytes` to rank individual flow records.

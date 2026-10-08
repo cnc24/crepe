@@ -19,7 +19,7 @@ fn packets(
     {
         return Err(crepe_core::Error::new(
             "CREPE-CLI-001",
-            "--ascii/--hex require table output",
+            "-A/--ascii, -X/--hex and -v/--verbose require --format table; omit them for JSON/CSV",
         ));
     }
     let mut filter = Filter::new(args.filter.as_deref(), args.filter_syntax)?;

@@ -21,7 +21,7 @@ windows, compressed/partitioned history, crash recovery and native Linux packagi
 
 **New user? Start with [preparation and installation](docs/GETTING-STARTED.md).**
 It covers macOS/Linux prerequisites, installation, your first capture, permissions
-and troubleshooting. [Download v1.2.3](https://github.com/cnc24/crepe/releases/tag/v1.2.3)
+and troubleshooting. [Download v1.2.4](https://github.com/cnc24/crepe/releases/tag/v1.2.4)
 for Apple Silicon macOS or Linux x86-64; ready-made binaries need no Rust/Cargo.
 
 **[User manual: commands, profiles and troubleshooting](docs/OPERATIONS.md)**
