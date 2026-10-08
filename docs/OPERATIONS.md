@@ -219,7 +219,7 @@ See [the tool comparison](COMPARISON.md) for Zeek/SiLK and
 
 The user-facing executable is **`crepe`**. Cargo is Rust's build manager and is
 needed only for a source build or update. Ready-made binaries are available in
-[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.2); Getting started
+[Releases](https://github.com/cnc24/crepe/releases/tag/v1.2.3); Getting started
 covers both binary and source installation.
 Run the following examples from the cloned repository root, where `example.pcap`
 and `fixtures/` are supplied synthetic test data:

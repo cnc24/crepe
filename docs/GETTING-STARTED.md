@@ -2,20 +2,20 @@
 
 This guide takes a new macOS or Linux installation through preparation,
 installation and a first analysis. Run commands in Terminal. After installation,
-you use **`crepe`**; Cargo is needed only to build or update it.
+you use **`crepe`**; Cargo is needed only for source builds and Cargo-managed updates.
 
 ## Install a ready-made release (recommended)
 
-Download [Crepe v1.2.2](https://github.com/cnc24/crepe/releases/tag/v1.2.2).
+Download [Crepe v1.2.3](https://github.com/cnc24/crepe/releases/tag/v1.2.3).
 Choose the asset for your operating system and CPU. **Rust, Cargo and compiler
 installation are not required for these binaries.**
 
 | System | Download |
 | --- | --- |
-| macOS Apple Silicon (arm64) | `crepe-1.2.2-darwin-arm64.tar.gz` and its `.sha256` file |
-| Ubuntu/Debian x86-64 | `crepe_1.2.2_amd64.deb` and its `.sha256` file |
-| Fedora x86-64 | `crepe-1.2.2-1.x86_64.rpm` and its `.sha256` file |
-| Other compatible Linux x86-64 | `crepe-1.2.2-linux-x86_64.tar.gz` and its `.sha256` file |
+| macOS Apple Silicon (arm64) | `crepe-1.2.3-darwin-arm64.tar.gz` and its `.sha256` file |
+| Ubuntu/Debian x86-64 | `crepe_1.2.3_amd64.deb` and its `.sha256` file |
+| Fedora x86-64 | `crepe-1.2.3-1.x86_64.rpm` and its `.sha256` file |
+| Other compatible Linux x86-64 | `crepe-1.2.3-linux-x86_64.tar.gz` and its `.sha256` file |
 
 The Linux binaries need libpcap and compatible system libraries. Native package
 managers check dependencies; the generic archive is not a statically linked,
@@ -32,11 +32,11 @@ Download the macOS archive and checksum into Downloads, then run:
 
 ```sh
 cd "$HOME/Downloads"
-shasum -a 256 -c crepe-1.2.2-darwin-arm64.tar.gz.sha256
-mkdir -p crepe-1.2.2
-tar -xzf crepe-1.2.2-darwin-arm64.tar.gz -C crepe-1.2.2
+shasum -a 256 -c crepe-1.2.3-darwin-arm64.tar.gz.sha256
+mkdir -p crepe-1.2.3
+tar -xzf crepe-1.2.3-darwin-arm64.tar.gz -C crepe-1.2.3
 mkdir -p "$HOME/.local/bin"
-install -m 755 crepe-1.2.2/crepe "$HOME/.local/bin/crepe"
+install -m 755 crepe-1.2.3/crepe "$HOME/.local/bin/crepe"
 export PATH="$HOME/.local/bin:$PATH"
 crepe --version
 crepe chocolate
@@ -54,12 +54,12 @@ commands for your distribution:
 
 ```sh
 # Ubuntu/Debian
-sha256sum -c crepe_1.2.2_amd64.deb.sha256
-sudo apt install ./crepe_1.2.2_amd64.deb
+sha256sum -c crepe_1.2.3_amd64.deb.sha256
+sudo apt install ./crepe_1.2.3_amd64.deb
 
 # Fedora: use these instead
-sha256sum -c crepe-1.2.2-1.x86_64.rpm.sha256
-sudo dnf install ./crepe-1.2.2-1.x86_64.rpm
+sha256sum -c crepe-1.2.3-1.x86_64.rpm.sha256
+sudo dnf install ./crepe-1.2.3-1.x86_64.rpm
 ```
 
 Then run `crepe --version` and `crepe chocolate`. These packages also contain a
@@ -287,7 +287,7 @@ package with `sudo apt remove crepe` or `sudo dnf remove crepe`; data and local
 configuration may remain. Stop any configured sensor service before removal.
 
 
-To update, stop running Crepe processes, return to your cloned repository and
+For a source installation, stop running Crepe processes, return to your cloned repository and
 run the following. Back up persistent stores before an upgrade; consult the
 [upgrade instructions](OPERATIONS.md#upgrades-and-public-contracts).
 
