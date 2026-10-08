@@ -1,9 +1,9 @@
 //! Bounded bidirectional packet-to-flow accounting, not TCP stream reassembly.
 use crepe_core::{Endpoint, Error, EventType, PacketEvent, Protocol, Result};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct FlowKey {
     pub a: Endpoint,
     pub b: Endpoint,
@@ -33,7 +33,7 @@ impl FlowKey {
         )
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EndReason {
     Eof,
@@ -44,7 +44,7 @@ pub enum EndReason {
     TcpReset,
 }
 /// Passive observations, not validation of endpoint TCP state or ACK numbers.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TcpState {
     SynSeen,
@@ -54,7 +54,7 @@ pub enum TcpState {
     Closed,
     Reset,
 }
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FlowRecord {
     pub schema_version: u16,
     pub event_type: EventType,

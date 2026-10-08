@@ -82,10 +82,12 @@ pub fn decode_view(data: &[u8], header: EventHeader, link: u32) -> Result<Option
                 event.dst.port = Some(t.destination_port());
             }
             Some(TransportSlice::Icmpv4(t)) => {
+                transport_payload = t.payload();
                 event.icmp_type = Some(t.slice()[0]);
                 event.icmp_code = Some(t.slice()[1]);
             }
             Some(TransportSlice::Icmpv6(t)) => {
+                transport_payload = t.payload();
                 event.icmp_type = Some(t.slice()[0]);
                 event.icmp_code = Some(t.slice()[1]);
             }

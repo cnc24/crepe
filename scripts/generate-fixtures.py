@@ -128,5 +128,15 @@ if __name__ == '__main__':
                 pieces.append(eth+header+s.pack('!BBHI',17,0,offset|int(more),42)+part)
         fragments += list(reversed(pieces))
     files['fragments.pcap'] = pcap(packets=fragments)
+    # Packet display and application filters: HTTP on a nonstandard port, ARP and VLAN LLDP.
+    eth = bytes.fromhex('ffffffffffff020000000001')
+    arp = s.pack('!HHBBH',1,0x0800,6,4,1) + bytes.fromhex('020000000001') + bytes([192,0,2,10]) + bytes(6) + bytes([192,0,2,1])
+    display_packets = [eth+s.pack('!H',0x0806)+arp,
+        eth+s.pack('!HHH',0x8100,7,0x88cc)+bytes.fromhex('0207040200000000010403057030060200780000'),
+        frame(4,6,50123,8088,flags=24,payload=b'GET /search?q=crepe HTTP/1.1\r\nHost: example.test\r\nX-Test: \x1b[31munsafe\r\n\r\n'),
+        frame(4,6,50123,8088,reverse=True,flags=24,payload=b'HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nhello web'),
+        frame(4,6,50080,80,flags=24,payload=b'not an HTTP request'),
+        eth+s.pack('!H',0x88b5)+b'opaque protocol']
+    files['packet-display.pcap'] = pcap(packets=display_packets)
     for name, data in files.items():
         ROOT.joinpath('fixtures', name).write_bytes(data)

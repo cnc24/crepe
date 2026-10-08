@@ -7,7 +7,6 @@ use crate::{
 };
 use crepe_capture::{self as capture, export::Export};
 use crepe_core::Result;
-use crepe_flow::{Config, FlowTable};
 use std::io;
 
 fn packets(
@@ -15,6 +14,14 @@ fn packets(
     live: bool,
     source: impl FnOnce(&mut dyn FnMut(capture::Record<'_>) -> Result<bool>) -> Result<()>,
 ) -> Result<()> {
+    if (args.ascii || args.hex > 0 || args.verbose > 0)
+        && !matches!(args.format, crate::Format::Table)
+    {
+        return Err(crepe_core::Error::new(
+            "CREPE-CLI-001",
+            "--ascii/--hex require table output",
+        ));
+    }
     let mut filter = Filter::new(args.filter.as_deref(), args.filter_syntax)?;
     let mut export = args.write.as_deref().map(Export::create).transpose()?;
     let mut out = output::Output::new(io::BufWriter::new(io::stdout().lock()), args.format);
@@ -23,6 +30,37 @@ fn packets(
     let mut malformed = 0_u64;
     let result = source(&mut |record| {
         if !filter.raw_matches(&record)? {
+            return Ok(true);
+        }
+        if let Some(link) = match crate::link_display::decode(&record) {
+            Ok(value) => value,
+            Err(error) if args.tolerant => {
+                malformed += 1;
+                let _ = error;
+                return Ok(true);
+            }
+            Err(error) => return Err(error),
+        } {
+            if filter.link_matches(link.proto) {
+                if let Some(export) = &mut export {
+                    export.write(&record)?;
+                }
+                out.link(&link)?;
+                out.payload(
+                    if args.hex > 1 {
+                        record.data
+                    } else {
+                        link.payload
+                    },
+                    args.ascii,
+                    args.hex > 0,
+                )?;
+                if live {
+                    out.flush()?;
+                }
+                matched += 1;
+                return Ok(args.limit.is_none_or(|limit| matched < limit));
+            }
             return Ok(true);
         }
         let decoded =
@@ -42,14 +80,26 @@ fn packets(
         let Some(view) = decoded else {
             return Ok(true);
         };
-        let event = &view.event;
-        if !filter.matches(event) {
+        if !filter.view_matches(&view) {
             return Ok(true);
         }
         if let Some(export) = &mut export {
             export.write(&record)?;
         }
         out.packet(&view)?;
+        if args.verbose > 0 {
+            out.packet_details(&record, &view, args.verbose)?;
+        }
+        if args.ascii || args.hex > 0 {
+            let bytes = if args.hex > 1 {
+                record.data
+            } else {
+                crepe_packet::network(record.data, record.linktype)?
+                    .map(|(ip, _)| ip)
+                    .unwrap_or(view.payload)
+            };
+            out.payload(bytes, args.ascii, args.hex > 0)?;
+        }
         if live {
             out.flush()?;
         }
@@ -69,6 +119,16 @@ fn packets(
 }
 pub(crate) fn run(cli: Cli) -> Result<()> {
     match cli.command {
+        Command::Licenses => {
+            use std::io::Write;
+            let mut out = io::stdout().lock();
+            out.write_all(include_bytes!("../../../LICENSE"))
+                .map_err(crate::output_error)?;
+            out.write_all(b"\n\n").map_err(crate::output_error)?;
+            out.write_all(include_bytes!("../../../THIRD-PARTY-NOTICES.txt"))
+                .map_err(crate::output_error)
+        }
+        Command::Update { check, output } => crate::update::run(check, output.as_deref()),
         Command::Daemon { config, duration } => {
             let settings = crate::history::config(Some(&config))?;
             if settings.interface.is_none() || settings.store.is_none() {
@@ -199,46 +259,7 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             let input = capture::open(&file)?;
             packets(args, false, |emit| capture::read_records(input, emit))
         }
-        Command::Flows {
-            file,
-            filter,
-            filter_syntax,
-            format,
-            max_flows,
-            details,
-            tcp_idle,
-            udp_idle,
-            active_timeout,
-        } => {
-            let mut filter = Filter::new(filter.as_deref(), filter_syntax)?;
-            let mut table = FlowTable::new(Config {
-                max_flows: max_flows as usize,
-                tcp_idle_secs: tcp_idle,
-                udp_idle_secs: udp_idle,
-                active_secs: active_timeout,
-            })?;
-            let input = capture::open(&file)?;
-            let mut out = output::Output::new(io::BufWriter::new(io::stdout().lock()), format);
-            if !details || !matches!(format, crate::Format::Table) {
-                out.header(true)?;
-            }
-            capture::read_records(input, |record| {
-                if !filter.raw_matches(&record)? {
-                    return Ok(true);
-                }
-                if let Some(event) = record.decode()? {
-                    if filter.matches(&event) {
-                        table.push(&event, |flow| out.flow(&flow, details))?;
-                    }
-                }
-                Ok(true)
-            })?;
-            table.finish(|flow| out.flow(&flow, details))?;
-            if table.skipped_fragments != 0 || table.skipped_other_protocols != 0 {
-                crate::report!("Oh là là! Skipped {} fragmented and {} non-TCP/UDP packets for flow accounting.", table.skipped_fragments, table.skipped_other_protocols);
-            }
-            out.flush()
-        }
+        Command::Flows(args) => crate::flow_command::run(args),
         #[cfg(feature = "live")]
         Command::Interfaces => live::interfaces(),
         #[cfg(feature = "live")]

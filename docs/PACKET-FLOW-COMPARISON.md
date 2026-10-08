@@ -85,7 +85,7 @@ payload length, frame length, ICMP labels and compact UDP DNS summaries.
 For a comparable tcpdump view use `TZ=UTC tcpdump -nn -S -r FILE FILTER`.
 Without `-S`, tcpdump normally presents relative TCP sequence numbers; without
 `-nn`, it may resolve host/service names. Crepe does neither in the packet view.
-JSON/CSV retain their lossless timestamp and packet schemas.
+IP JSON retains its lossless timestamp/schema. Since 1.2.3 packet CSV appends four link fields; see the manual.
 
 This is not a byte-for-byte clone of tcpdump output. tcpdump decodes more link
 and application protocols. Crepe's compact UDP/53 summary shows DNS questions

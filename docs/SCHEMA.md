@@ -136,3 +136,13 @@ bounded live journal. Their event IDs remain unchanged at checkpoint. A crash
 or failed session can discard that tail; committed Parquet rows are durable.
 Atomic offline imports remain invisible until commit. All published batches
 and any provisional snapshot use the same Arrow schema 1.
+
+## Raw packet/link CLI output (1.2.3)
+
+The historical schema described above is unchanged. Raw `read`/`capture` JSON now
+also includes non-IP link records: capture header, linktype, optional source and
+destination MAC, EtherType, VLAN IDs, protocol and textual details. Such records
+have no `src`/`dst` IP endpoint. Existing IP packet JSON is unchanged. Packet CSV
+appends `src_mac,dst_mac,ether_type,linktype` to its original 13 columns. Consumers
+should inspect `proto` and the available endpoint fields rather than assuming
+every capture frame is IP.

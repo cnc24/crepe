@@ -12,8 +12,8 @@ fn field(s: &str) -> Result<&'static str> {
         "time" | "timestamp" | "timestamp_ms" => Ok("timestamp_ms"),
         "timestamp_ns" => Ok("timestamp_ns"),
         "type" | "event.type" | "event_type" => Ok("event_type"),
-        "src.ip" | "src_ip" => Ok("src_ip"),
-        "dst.ip" | "dst_ip" => Ok("dst_ip"),
+        "src.ip" | "src_ip" | "ip.src" | "ipv6.src" => Ok("src_ip"),
+        "dst.ip" | "dst_ip" | "ip.dst" | "ipv6.dst" => Ok("dst_ip"),
         "src.port" | "src_port" => Ok("src_port"),
         "dst.port" | "dst_port" => Ok("dst_port"),
         "proto" => Ok("proto"),
@@ -190,7 +190,19 @@ impl Parser {
         let Some(Token::Word(f)) = self.tokens.get(self.p) else {
             return Err(err("expected field"));
         };
+        let family = if f.starts_with("ip.") {
+            Some("0.0.0.0/0")
+        } else if f.starts_with("ipv6.") {
+            Some("::/0")
+        } else {
+            None
+        };
         let f = field(f)?;
+        let qualify = |expression: String| {
+            family
+                .map(|net| format!("(crepe_cidr({f}, '{net}') AND ({expression}))"))
+                .unwrap_or(expression)
+        };
         if let Some(Token::Word(operator)) = self.tokens.get(self.p + 1) {
             let Some(Token::Word(value)) = self.tokens.get(self.p + 2) else {
                 return Err(err("expected value"));
@@ -248,7 +260,7 @@ impl Parser {
                 _ => return Err(err("unsupported field/operator combination")),
             };
             self.p += 3;
-            return Ok(expression);
+            return Ok(qualify(expression));
         }
         let Some(Token::Op(op)) = self.tokens.get(self.p + 1) else {
             return Err(err("expected comparison"));
@@ -310,7 +322,7 @@ impl Parser {
         }
         let v = literal(v, numeric(f))?;
         self.p += 3;
-        Ok(format!("{f} {op} {v}"))
+        Ok(qualify(format!("{f} {op} {v}")))
     }
 }
 pub fn compile(cql: &str) -> Result<String> {

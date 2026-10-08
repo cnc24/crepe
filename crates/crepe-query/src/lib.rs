@@ -34,6 +34,8 @@ pub enum Predicate {
     Ip(Side, Compare, IpAddr),
     Port(Side, Compare, u16),
     Proto(Compare, Protocol),
+    IpVersion(u8),
+    Application(String),
     In(Side, IpNet),
     Ports(Side, Vec<u16>),
 }
@@ -86,10 +88,12 @@ pub fn lex(input: &str) -> Result<Vec<Token>> {
                 }) {
                     atom.push(chars.next().unwrap().1);
                 }
-                if atom == "in" {
-                    Token::In
-                } else {
-                    Token::Atom(atom)
+                match atom.as_str() {
+                    "in" => Token::In,
+                    "and" => Token::And,
+                    "or" => Token::Or,
+                    "not" => Token::Not,
+                    _ => Token::Atom(atom),
                 }
             }
             _ => return Err(err(format!("unexpected character at byte {offset}"))),
@@ -165,7 +169,89 @@ impl Parser<'_> {
             }
             return Ok(e);
         }
-        let field = self.atom()?;
+        let original = self.atom()?;
+        let bare = match original.as_str() {
+            "tcp" => Some(Predicate::Proto(Compare::Eq, Protocol::Tcp)),
+            "udp" => Some(Predicate::Proto(Compare::Eq, Protocol::Udp)),
+            "icmp" => Some(Predicate::Proto(Compare::Eq, Protocol::Icmp)),
+            "icmpv6" => Some(Predicate::Proto(Compare::Eq, Protocol::Icmpv6)),
+            "ip" => Some(Predicate::IpVersion(4)),
+            "ipv6" => Some(Predicate::IpVersion(6)),
+            "http" | "dns" | "tls" | "ssh" => Some(Predicate::Application(original.clone())),
+            _ => None,
+        };
+        if let Some(predicate) = bare {
+            return Ok(Expr::Predicate(predicate));
+        }
+        let (field, guard, both) = match original.as_str() {
+            "ip.src" => ("src.ip", Some(Predicate::IpVersion(4)), false),
+            "ip.dst" => ("dst.ip", Some(Predicate::IpVersion(4)), false),
+            "ipv6.src" => ("src.ip", Some(Predicate::IpVersion(6)), false),
+            "ipv6.dst" => ("dst.ip", Some(Predicate::IpVersion(6)), false),
+            "ip.addr" => ("src.ip", Some(Predicate::IpVersion(4)), true),
+            "ipv6.addr" => ("src.ip", Some(Predicate::IpVersion(6)), true),
+            "tcp.srcport" => (
+                "src.port",
+                Some(Predicate::Proto(Compare::Eq, Protocol::Tcp)),
+                false,
+            ),
+            "tcp.dstport" => (
+                "dst.port",
+                Some(Predicate::Proto(Compare::Eq, Protocol::Tcp)),
+                false,
+            ),
+            "udp.srcport" => (
+                "src.port",
+                Some(Predicate::Proto(Compare::Eq, Protocol::Udp)),
+                false,
+            ),
+            "udp.dstport" => (
+                "dst.port",
+                Some(Predicate::Proto(Compare::Eq, Protocol::Udp)),
+                false,
+            ),
+            "tcp.port" => (
+                "src.port",
+                Some(Predicate::Proto(Compare::Eq, Protocol::Tcp)),
+                true,
+            ),
+            "udp.port" => (
+                "src.port",
+                Some(Predicate::Proto(Compare::Eq, Protocol::Udp)),
+                true,
+            ),
+            other => (other, None, false),
+        };
+        let field = field.to_string();
+        let qualify = |predicate: Predicate| {
+            let second = if both {
+                match &predicate {
+                    Predicate::Ip(_, op, v) => Some(Predicate::Ip(Side::Dst, *op, *v)),
+                    Predicate::Port(_, op, v) => Some(Predicate::Port(Side::Dst, *op, *v)),
+                    Predicate::In(_, v) => Some(Predicate::In(Side::Dst, *v)),
+                    Predicate::Ports(_, v) => Some(Predicate::Ports(Side::Dst, v.clone())),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            let all = matches!(
+                predicate,
+                Predicate::Ip(_, Compare::Ne, _) | Predicate::Port(_, Compare::Ne, _)
+            );
+            let mut result = Expr::Predicate(predicate);
+            if let Some(other) = second {
+                result = if all {
+                    Expr::And(Box::new(result), Box::new(Expr::Predicate(other)))
+                } else {
+                    Expr::Or(Box::new(result), Box::new(Expr::Predicate(other)))
+                };
+            }
+            if let Some(guard) = guard.clone() {
+                result = Expr::And(Box::new(Expr::Predicate(guard)), Box::new(result));
+            }
+            result
+        };
         let side = match field.as_str() {
             "src.ip" | "src.port" => Some(Side::Src),
             "dst.ip" | "dst.port" => Some(Side::Dst),
@@ -193,7 +279,7 @@ impl Parser<'_> {
                 }
                 ports.sort_unstable();
                 ports.dedup();
-                return Ok(Expr::Predicate(Predicate::Ports(side.unwrap(), ports)));
+                return Ok(qualify(Predicate::Ports(side.unwrap(), ports)));
             }
             if !field.ends_with(".ip") {
                 return Err(err("in requires an IP field"));
@@ -202,7 +288,7 @@ impl Parser<'_> {
                 .atom()?
                 .parse::<IpNet>()
                 .map_err(|_| err("expected IPv4/IPv6 CIDR"))?;
-            return Ok(Expr::Predicate(Predicate::In(side.unwrap(), value)));
+            return Ok(qualify(Predicate::In(side.unwrap(), value)));
         }
         let op = if self.take(&Token::Eq) {
             Compare::Eq
@@ -238,15 +324,24 @@ impl Parser<'_> {
                 },
             ),
         };
-        Ok(Expr::Predicate(predicate))
+        Ok(qualify(predicate))
     }
 }
 impl Expr {
     pub fn matches(&self, event: &PacketEvent) -> bool {
+        self.matches_application(event, None)
+    }
+    pub fn matches_application(&self, event: &PacketEvent, application: Option<&str>) -> bool {
         match self {
-            Self::Not(e) => !e.matches(event),
-            Self::And(a, b) => a.matches(event) && b.matches(event),
-            Self::Or(a, b) => a.matches(event) || b.matches(event),
+            Self::Not(e) => !e.matches_application(event, application),
+            Self::And(a, b) => {
+                a.matches_application(event, application)
+                    && b.matches_application(event, application)
+            }
+            Self::Or(a, b) => {
+                a.matches_application(event, application)
+                    || b.matches_application(event, application)
+            }
             Self::Predicate(p) => {
                 let endpoint = |side: &Side| match side {
                     Side::Src => &event.src,
@@ -261,6 +356,8 @@ impl Expr {
                     Predicate::Port(side, op, port) => {
                         endpoint(side).port.is_some_and(|p| compare(op, p == *port))
                     }
+                    Predicate::IpVersion(version) => event.src.ip.is_ipv4() == (*version == 4),
+                    Predicate::Application(name) => application == Some(name.as_str()),
                     Predicate::Proto(op, proto) => compare(op, event.proto == *proto),
                     Predicate::In(side, net) => net.contains(&endpoint(side).ip),
                     Predicate::Ports(side, ports) => endpoint(side)

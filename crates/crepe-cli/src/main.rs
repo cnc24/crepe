@@ -1,7 +1,11 @@
+mod application;
 mod args;
 mod commands;
+mod flow_command;
 mod flow_display;
+mod help;
 mod history;
+mod link_display;
 #[cfg(feature = "live")]
 mod live;
 mod metrics;
@@ -10,10 +14,11 @@ mod packet_display;
 mod packet_filter;
 mod recipes;
 mod reporting;
+mod update;
 #[cfg(feature = "live")]
 mod windows;
 use args::{Cli, Format};
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches};
 use crepe_core::Error;
 use std::{io, process::ExitCode};
 
@@ -36,7 +41,13 @@ fn main() -> ExitCode {
         early.iter().any(|a| a == "--log-format=json")
             || early.windows(2).any(|w| w == ["--log-format", "json"]),
     );
-    let cli = match Cli::try_parse() {
+    let command = Cli::command();
+    let template = help::root(&command);
+    let cli = match command
+        .help_template(template)
+        .try_get_matches()
+        .and_then(|matches| Cli::from_arg_matches(&matches))
+    {
         Ok(cli) => cli,
         Err(e) => {
             if matches!(

@@ -10,26 +10,28 @@ Examples below use the included synthetic captures. For a real capture replace
 interpret parentheses, `!`, `&` or `|`. `[]` below means optional arguments.
 Every command supports `--help`.
 
-| Command | What it does / common options |
-| --- | --- |
-| `read FILE [FILTER]` | Packet summaries; `--format table\|json\|csv`, `--limit N`, `--write FILE`, `--tolerant`, `--filter-syntax auto\|cql\|bpf` |
-| `capture -i IFACE [FILTER]` / `sucre` | Live packet summaries; read options plus `--duration SECONDS`, `--count N`, `--bpf FILTER`, `--promisc` |
-| `interfaces` | List available capture interfaces |
-| `flows FILE [FILTER]` | Bidirectional TCP/UDP counters; `--details`, `--format`, `--filter-syntax`, `--max-flows`, `--tcp-idle`, `--udp-idle`, `--active-timeout` |
-| `analyze FILE` | Reassembly and application observations; `--format table\|json\|csv`, `--dns-port`, `--max-streams`, `--max-buffer-bytes`, `--stream-idle` |
-| `chocolate [FILE]` | Deep-analysis recipe; without a source, opens the interactive menu |
-| `suzette [FILE]` | Persistent forensic case; `--store DIR` selects the history location |
-| `maison [FILE] --config FILE` | Analysis using your own configuration |
-| `complete [FILE]` | All implemented observation modules |
-| `profiles` | List recipes and descriptions |
-| `ingest FILE --store DIR` | Import into persistent history; `--profile`, `--sensor`, `--config` |
-| `query DIR [CQL]` | Query stored observations; default `*`, JSON Lines output |
-| `trace DIR FLOW_ID` | Stored observations for a conversation |
-| `timeline DIR --limit N` | Chronological stored observations |
-| `collect` / `banane` | Receive NetFlow v5/v9/IPFIX; `--listen IP:PORT`, `--duration SECONDS`, `--count N`, `--store DIR`, `--sensor NAME` |
-| `config [FILE]` | Validate and show effective configuration |
-| `daemon --config FILE` | Configured live sensor; optional `--duration SECONDS` |
-| `compact DIR --output NEW_DIR` | Copy/compact a stopped history store; optional `--since-ms UNIX_MS` |
+| Command | Alias | What it does / common options |
+| --- | --- | --- |
+| `read FILE [FILTER]` | — | Packet/link summaries; `-v`/`-vv`, `-A`, `-X`/`-XX` (combinable as `-vvX`), `--format table\|json\|csv`, `--limit N`, `--write FILE`, `--tolerant`, `--filter-syntax auto\|cql\|bpf` |
+| `capture -i IFACE [FILTER]` | `sucre` | Live packet summaries; read options plus `--duration SECONDS`, `--count N`, `--bpf FILTER`, `--promisc` |
+| `interfaces` | `interface` | List available capture interfaces |
+| `flows FILE_OR_STORE [FILTER_OR_QUERY]` | — | TCP/UDP flows; `--store DIR`, `--query CQL`, `--sort packets\|bytes\|flows`, `--group FIELDS`, `--count`, `--limit N`, `--details` |
+| `analyze FILE` | — | Reassembly and application observations; `--format table\|json\|csv`, `--dns-port`, `--max-streams`, `--max-buffer-bytes`, `--stream-idle` |
+| `inspect [FILE]` | `chocolate` | Deep-analysis recipe; without a source, opens the interactive menu |
+| `forensics [FILE]` | `suzette` | Persistent forensic case; `--store DIR` selects the history location |
+| `run [FILE] --config FILE` | `maison` | Analysis using your own configuration |
+| `full [FILE]` | `complete` | All implemented observation modules |
+| `profiles` | — | List recipes and descriptions |
+| `ingest FILE --store DIR` | — | Import into persistent history; `--profile`, `--sensor`, `--config` |
+| `query DIR [CQL]` | — | Query stored observations; default `*`, JSON Lines output |
+| `trace DIR FLOW_ID` | — | Stored observations for a conversation |
+| `timeline DIR --limit N` | — | Chronological stored observations |
+| `collect` | `banane` | Receive NetFlow v5/v9/IPFIX; `--listen IP:PORT`, `--duration SECONDS`, `--count N`, `--store DIR`, `--sensor NAME` |
+| `update [--check] [--output NEW_PATH]` | — | Check/install the latest stable official archive; see update instructions below |
+| `licenses` | — | Print embedded project license and third-party notices |
+| `config [FILE]` | — | Validate and show effective configuration |
+| `daemon --config FILE` | — | Configured live sensor; optional `--duration SECONDS` |
+| `compact DIR --output NEW_DIR` | — | Copy/compact a stopped history store; optional `--since-ms UNIX_MS` |
 
 The four analysis recipes share `-i IFACE` (instead of FILE), `--duration`,
 `--store`, `--config`, `--enable MODULE`, `--disable MODULE`, `--tolerant` and
@@ -49,7 +51,7 @@ packet records, flow records and historical observations have different fields.
 
 `read`, `capture`/`sucre` and `flows` accept either grammar in the same positional
 argument. Official release binaries include libpcap support. A portable source
-build without the `live` feature supports CQL only; build with `--features live`
+build without the `live` feature supports CQL and the standalone protocol shortcuts; build with `--features live`
 or `--all-features` for BPF. Reading a file does not require capture privileges.
 
 | Task | tcpdump/BPF | Crepe packet CQL |
@@ -76,10 +78,12 @@ crepe capture -i lo0 'udp port 53' --duration 10
 Auto mode recognizes CQL's dotted endpoint fields and `proto ==` / `proto !=`;
 other expressions go to libpcap. Use `--filter-syntax cql` or `bpf` to force a
 grammar when needed. This is Crepe CQL, **not full Wireshark display-filter
-syntax**. Packet CQL fields are exactly `src.ip`, `dst.ip`, `src.port`,
-`dst.port`, `proto`; operators are `==`, `!=`, `&&`, `||`, `!`, parentheses,
+syntax**. Packet CQL fields are `src.ip`, `dst.ip`, `src.port`,
+`dst.port`, `proto`, with Wireshark-compatible `ip.src/dst/addr`,
+`ipv6.src/dst/addr`, `tcp.srcport/dstport/port` and `udp.srcport/dstport/port` aliases; operators are `==`, `!=`, `&&`, `||`, `!`, parentheses,
 IP `in CIDR` and port `in [N,...]`. Protocols: `tcp`, `udp`, `icmp`, `icmpv6`
-or a numeric IP protocol. No payload strings or history pipelines here.
+or a numeric IP protocol. Bare `http`, `dns`, `tls` and `ssh` test packet-local protocol recognition and
+can be combined with these predicates. No arbitrary payload strings or history pipelines here.
 
 BPF uses the actual libpcap compiler, including its `host`, `net`, `port`,
 `portrange`, protocol, boolean and packet-byte expressions. Consult
@@ -93,8 +97,8 @@ then compiled for each encountered supported linktype. Ethernet-only expressions
 can fail on raw-IP/loopback inputs. This version explicitly rejects snaplen-truncated
 frames with `CREPE-CAP-005` on the userspace BPF path: the safe binding cannot
 preserve the original wire length for `len`/`greater`/`less`. Capture full frames,
-or use CQL with `--tolerant` to skip malformed packet payloads. `read` still
-emits only supported IP packets: an ARP filter does not make it an ARP decoder.
+or use CQL with `--tolerant` to skip malformed packet payloads. Since 1.2.3, `read`
+also shows non-IP link frames and decodes basic ARP request/reply addresses.
 BPF port filters and CQL differ for fragments, VLANs and IPv6 extension headers;
 BPF follows libpcap's semantics. Do not assume every superficially equivalent
 expression selects every edge case identically.
@@ -125,10 +129,11 @@ including its link header. Fragments are labelled without invented transport
 fields. ICMP shows type, code and common message names.
 
 The compact DNS summary covers UDP port 53 (question/type, ID, response code and
-answer count). TCP DNS, full resource records, HTTP and TLS details belong to
-`analyze`/`chocolate`; the packet view does not run stream reassembly or print
-HTTP bodies. JSON/CSV packet schemas and lossless Unix-nanosecond timestamps
-are unchanged for scripts.
+answer count). HTTP request/status lines and SSH banners appear in packet summaries;
+`-A` exposes captured payload, including HTTP headers/body. Reassembled messages,
+full DNS resource records and deeper TLS metadata belong to `analyze`/`chocolate`.
+Lossless Unix-nanosecond timestamps and IP JSON remain unchanged; packet CSV
+appends link columns in 1.2.3 (see below).
 
 ### Reading the flow table (1.2.2)
 
@@ -732,3 +737,184 @@ deep analysis; Suzette retains forensic history; Maison uses the configured prof
 and limits; Complete enables the implemented packet engines with optional exporter
 input (`--listen`). Unimplemented design items, such as DHCP decoding, are not
 implicitly enabled by Complete. See [design status](DESIGN-STATUS.md).
+
+## Packet detail and application filters (1.2.3)
+
+```sh
+crepe read http.pcap
+crepe read http.pcap 'http'
+crepe read http.pcap -A | grep 'Host:'
+crepe read http.pcap -A | grep 'Content-Type:'
+crepe read traffic.pcap 'arp'
+crepe read traffic.pcap 'lldp' -X
+crepe forensics incident.pcap --store ./case
+```
+
+Use ordinary ASCII shell quotes (`'http'`), not typographic quotation marks.
+HTTP is an application protocol above TCP. With `--filter-syntax auto` (the default),
+standalone `http`, `dns`, `tls`, and `ssh` select packet-local recognized application
+messages; `arp`, `lldp`, and `eapol` select link protocols. The shortcuts also work
+without libpcap. The application predicates can be combined with supported CQL/display fields using
+`and`/`or`/`not` or `&&`/`||`/`!`, e.g. `http and ip.src == 192.0.2.10`.
+Supported display fields are `ip.src`, `ip.dst`, `ip.addr`, their `ipv6.*`
+equivalents, and `tcp`/`udp` `.srcport`, `.dstport`, `.port`. Protocol/family
+existence is checked: `tcp.port != 80` never selects UDP; either-endpoint `!=`
+requires both ports to differ. CQL `src.ip`/`dst.ip` remain family-neutral. This is
+an explicit subset, not the entire Wireshark grammar. Link shortcuts remain
+standalone; use actual BPF for link/address combinations.
+`--filter-syntax bpf` always uses the actual libpcap grammar.
+
+HTTP detection checks a complete HTTP/1.0 or HTTP/1.1 request/status line, including
+on nonstandard ports; a TCP packet on port 80 alone is insufficient. It does not
+match SYN/ACK-only packets, headerless body continuations, HTTP/2, encrypted HTTPS,
+or a start line split across packets. TLS uses record-header recognition, SSH its
+banner, and DNS validated UDP or length-prefixed TCP messages on port 53. These are
+packet observations, not a retrospective classification of entire connections.
+For TCP reassembly use `analyze` or `chocolate`. For `flows 'http'`, counters cover
+only matching packets, just as for any pre-aggregation packet filter.
+
+The normal text view includes HTTP request/status lines and SSH banners. `-A`
+prints the captured network packet (excluding the link header), including
+HTTP headers/body, on additional lines suitable for `grep`. `-X` prints hex and
+ASCII from the network header; `-XX` includes the link header. `-v` adds IP and
+capture metadata, `-vv` adds captured HTTP headers. Combined options such as
+`-vvX` work. These flags require table output; `-A` and `-X` cannot be combined. No reverse DNS
+lookups, decompression, decryption or reassembly is performed by `read`. Unsafe
+control bytes are escaped (hex uses dots); line feeds remain readable and CR is
+removed. IP/TCP headers are included in network dumps. This is
+useful tcpdump-style detail, not byte-for-byte equivalence with every tcpdump decoder.
+
+Non-IP Ethernet/VLAN, Linux SLL and SLL2 records are now shown rather than silently
+skipped. ARP includes request/reply addresses; LLDP/EAPOL/LLC and unknown EtherTypes
+have a link summary and optional payload dump, not complete protocol dissection.
+IP-only CQL filters exclude them. `--limit` and `--write` apply to matching link
+frames as well as IP packets. Strict/tolerant malformed-frame behavior still applies.
+
+IP JSON is unchanged. Non-IP JSON records have `proto`, `src_mac`, `dst_mac`,
+`ether_type`, `vlans`, `linktype`, `details` and the capture `header`; they have no
+fabricated `src`/`dst` IP endpoints. Cooked captures may have null MAC addresses.
+Packet CSV now appends `src_mac,dst_mac,ether_type,linktype` to the original 13
+columns (17 total); IP rows leave these appended fields blank. Non-IP rows leave
+IP/port/TCP fields blank. Flow and historical schemas are unchanged.
+
+## Updating (1.2.3 and later)
+
+```sh
+crepe update --check
+crepe update
+crepe update --output ./crepe-new
+crepe licenses
+```
+
+The update command first appears in 1.2.3: older versions need a one-time installation
+of 1.2.3 using the normal download/package instructions. `--check` never installs.
+`update` compares semantic versions against the latest published stable release
+in `cnc24/crepe`, downloads the matching official archive and verifies its SHA-256
+against both the checksum file and GitHub asset digest. It stages the binary next
+to the destination, checks that it runs with the expected version, then atomically
+replaces the archive-installed executable. Download/check failures leave the old
+binary intact. No downgrade or prerelease installation is performed. Existing
+sessions keep using the old binary until restarted. Embedded license notices stay
+available through `crepe licenses`; other installed documentation is not updated.
+
+Requires `curl`, outbound HTTPS, a supported release platform (macOS arm64 or Linux
+x86-64) and write permission to the installation directory. No automatic sudo or
+permission change is attempted. DEB/RPM (`/usr/bin`), Homebrew Cellar and Cargo
+`target`/`.cargo` installations and detected Cargo install roots are directed to their installer; `--output NEW_PATH` can
+instead create a standalone binary without overwriting an existing path. For
+custom Cargo installations, prefer reinstalling with Cargo to retain your chosen features. Custom features are not retained by replacing
+with the standard official binary. For offline/restricted hosts use the downloadable
+archives/packages and checksums. Checksums detect corruption; they are not an
+independent release signature.
+
+### French diagnostics
+
+`Zut alors!` is a correct French expression of annoyance/surprise, retained for CLI
+usage errors ([Larousse](https://www.larousse.fr/dictionnaires/francais-anglais/zut/82254)).
+`Tout alors` is not its replacement. Stable error codes remain unchanged; `--serious`
+removes the humorous wording. Updater failures use `CREPE-UPD-001`.
+
+## Command names and aliases (1.2.3)
+
+Root help now lists **COMMAND**, **ALIAS**, and **PURPOSE** in separate columns.
+The factual commands are `capture` (Sucre), `collect` (Banane), `inspect`
+(Chocolate), `forensics` (Suzette), `run` (Maison), and `full` (Complete).
+Both spellings execute the same workflow. `analyze` remains the focused
+reassembly/application command; `inspect` additionally produces packet and flow
+observations. `choclate` remains a hidden compatibility spelling.
+
+## Flow database and query workflow (1.2.3)
+
+```sh
+# Create the flow database; all generated flow records are retained.
+crepe flows http.pcap --store ./flows
+# Query the saved records using either entry point.
+crepe flows ./flows '* | sort packets desc | limit 10'
+crepe query ./flows '* | sort packets desc | limit 10'
+# The same query directly on a capture, using a temporary database.
+crepe flows http.pcap --query '* | sort packets desc | limit 10'
+crepe flows http.pcap 'bytes > 1000 | sort bytes desc'
+crepe flows http.pcap '* | count'
+crepe flows http.pcap '* | group src.ip,dst.ip | sort count desc'
+# Convenience flags: descending sort, grouped flow counts and top-N results.
+crepe flows http.pcap --sort bytes --limit 10
+crepe flows http.pcap --group src.ip --sort flows --limit 10
+# Packet prefilter plus post-aggregation query, explicitly separated.
+crepe flows http.pcap 'dst port 80' --query '* | sort bytes desc'
+# Correlate observations belonging to one conversation.
+crepe query ./flows '* | select flow.id,src.ip,dst.ip,packets,bytes'
+crepe trace ./flows FLOW_ID
+```
+
+A bare `flows FILE` is still a streaming summary and creates no persistent store.
+`--store DIR` is the explicit database-creation step. A positional pipeline or
+predicate beginning with `bytes`, `packets`, `flow.` or `event.` is a flow query;
+`--query` makes this unambiguous for any historical CQL expression. `flows DIR`
+reads a saved database. The flow-query grammar is the same as `query DIR`:
+comparisons, `group`, `count`, `sum FIELD as NAME`, `sort FIELD asc|desc`, `limit`,
+`select`, `timeline` and the other documented historical stages. `ip.src`/`ip.dst`
+(and IPv6 equivalents) are accepted here too. Wireshark TCP/UDP port aliases and
+packet-local application predicates apply to packet filters; historical queries
+use `proto`, `src.port`, `dst.port` and stored application fields.
+
+Flows are bidirectional: historical `src`/`dst` mean canonical left/right
+endpoints, not inferred client/server or each individual packet's direction.
+A packet prefilter runs **before** aggregation and can reduce counters. A flow
+query runs **after** aggregation and retains the selected complete counters.
+`packets` and `bytes` total both directions; bytes include link headers. Grouping
+without a following explicit aggregate returns group flow count and packet/byte
+sums. `--count` counts flows, per group when grouped; `--sort flows` sorts grouped
+flow counts. Query results are capped at 10,000 rows and use bounded query memory;
+all generated records remain stored independently of output limits. Query output
+waits until capture processing/commit completes.
+
+Flow-only stores contain `flow.end` observations. Their 64-character historical
+`flow_id` uses the same sensor/source/link-scoped conversation identity as
+`forensics`/`inspect`, enabling trace correlation. A flow-only store cannot expose
+DNS/TLS/HTTP observations that were never stored; use `forensics FILE --store CASE`
+for that. `trace` correlates by this identity, not by arbitrary SQL joins or the
+short `CX-...` IDs in standalone flow details. Flow queries on a mixed case store
+scope to `flow.end` before grouping; `query CASE` searches all event types unless
+filtered explicitly.
+
+Repeated imports of the same capture/filter/settings are rejected as duplicate
+batches. Prefer a new store when comparing different filters on the same capture;
+appending overlapping analyses can double-count observations. Interrupted or failed
+imports do not publish a partial batch. The original capture is not copied.
+
+`flows --format json` without a query retains the original flow-record schema.
+Query-mode JSON uses historical rows/projections, identical to `query`; table/CSV
+output formats complete flow rows as flows and aggregate/projection results as
+columns. The manual and `flows -h` show both paths explicitly.
+
+### Reference semantics and limits
+
+The compatibility choices above were checked against the official manuals:
+[tcpdump](https://www.tcpdump.org/manpages/tcpdump.1.html),
+[Wireshark display filters](https://www.wireshark.org/docs/man-pages/wireshark-filter.html),
+[TShark](https://www.wireshark.org/docs/man-pages/tshark.html), and
+[nfdump](https://github.com/phaag/nfdump/blob/master/man/nfdump.1).
+Crepe adopts tcpdump-style verbosity/dumps, selected Wireshark fields, and a
+consistent flow-query pipeline. It does not implement every option/dissector of
+these tools. nfdump's frequently directional records must still be normalized
+before comparison with Crepe's bidirectional records.

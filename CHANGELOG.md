@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.2.3 — 2026-10-08
+
+- Add verified, atomic official archive updates (`update`, `--check`, `--output`) and embedded `licenses`.
+- Show non-IP Ethernet/VLAN/SLL/SLL2 frames, with ARP details and generic LLDP/EAPOL/LLC/unknown summaries.
+- Show HTTP request/status lines and SSH banners; add safe ASCII (`-A`) and hex (`-X`) payload output.
+- Accept standalone packet-local `http`, `dns`, `tls`, `ssh`, `arp`, `lldp` and `eapol` filters.
+- Use factual canonical commands with an alias column in root help; retain all recipe aliases and correct French `Zut alors!`.
+- Accept selected Wireshark fields (`ip.src`, `ip.addr`, TCP/UDP ports), protocol existence and logical operators.
+- Add `-v`, `-vvX`, and full-frame `-XX` dumps.
+- Bridge flows to historical storage: `--store`, direct queries, existing-store queries, grouped counts, sorting, top-N and correlation guidance.
+- Packet CSV appends four link fields (17 columns); non-IP JSON uses MAC/link fields instead of IP endpoints. Existing IP JSON, flow and historical schemas stay unchanged.
+
 ## 1.2.2 — 2026-10-05
 
 - Restore Suzette’s forensic workflow: automatically retain a case unless a store is explicitly selected, and show statistics/timeline/trace commands. Other offline recipes remain temporary by default.

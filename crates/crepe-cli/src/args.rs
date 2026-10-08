@@ -1,12 +1,7 @@
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 #[derive(Parser)]
-#[command(
-    name = "crepe",
-    version,
-    about = "Packet capture and flow explorer",
-    after_help = "Start here:\n  read FILE [FILTER]     Inspect packets (CQL or tcpdump filters).\n  flows FILE [FILTER]    Summarize connections.\n  capture -i INTERFACE  Inspect live packets.\n\nAnalysis recipes:\n  chocolate  Deep protocol and connection analysis.\n  suzette    Persistent forensic case, statistics, timeline and trace.\n  complete   All implemented packet engines; --listen adds exporter input.\n  maison     Use your configured analysis settings.\n  Run a recipe without arguments for source selection. File recipes print JSON\n  after analysis finishes; live recipes stream observations. Use --store PATH\n  to retain history, then query PATH 'YOUR QUERY'.\n\nPresentation:\n  Recipe names select analysis workflows; --serious only disables humorous\n  diagnostics. It does not change analysis. Help and data output stay factual."
-)]
+#[command(name = "crepe", version, about = "Packet capture and flow explorer")]
 pub(crate) struct Cli {
     /// Disable French flair in runtime messages.
     #[arg(long, global = true)]
@@ -29,7 +24,7 @@ pub(crate) enum FilterSyntax {
 
 #[derive(Args)]
 pub(crate) struct PacketArgs {
-    /// Packet filter: CQL or tcpdump/BPF (requires the live build feature).
+    /// Filter: CQL, tcpdump/BPF, or http/dns/tls/ssh/arp/lldp/eapol. BPF requires live support.
     pub filter: Option<String>,
     /// Select a grammar explicitly, or detect CQL fields automatically.
     #[arg(long, value_enum, default_value_t = FilterSyntax::Auto)]
@@ -39,42 +34,86 @@ pub(crate) struct PacketArgs {
     pub tolerant: bool,
     #[arg(long, value_enum, default_value_t = Format::Table)]
     pub format: Format,
-    /// Stop after this many matching IP packets.
+    /// Print captured transport/link payload as safe ASCII text (table output only).
+    #[arg(short = 'A', long, conflicts_with = "hex")]
+    pub ascii: bool,
+    /// Print captured transport/link payload as hex and ASCII (table output only).
+    #[arg(short = 'X', long, action = clap::ArgAction::Count)]
+    pub hex: u8,
+    /// More packet metadata (-v); application headers (-vv). Combines with -X/-XX.
+    #[arg(short = 'v', long, action = clap::ArgAction::Count)]
+    pub verbose: u8,
+    /// Stop after this many matching packets or link frames.
     #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
     pub limit: Option<u64>,
     /// Write matching packet bytes to a new PCAP (never overwrites).
     #[arg(short, long)]
     pub write: Option<PathBuf>,
 }
+#[derive(Args)]
+pub(crate) struct FlowArgs {
+    /// Capture file OR a previously created historical store directory.
+    pub file: PathBuf,
+    /// Packet filter before aggregation; a pipeline or bytes/packets predicate is a flow query.
+    pub filter: Option<String>,
+    #[arg(long, value_enum, default_value_t = FilterSyntax::Auto)]
+    pub filter_syntax: FilterSyntax,
+    #[arg(long, value_enum, default_value_t = Format::Table)]
+    pub format: Format,
+    #[arg(long, default_value_t = 65536, value_parser = clap::value_parser!(u32).range(1..=1_000_000))]
+    pub max_flows: u32,
+    /// Show expanded directional counters, flags and end reasons instead of one row per flow.
+    #[arg(long)]
+    pub details: bool,
+    #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..))]
+    pub tcp_idle: u64,
+    #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..))]
+    pub udp_idle: u64,
+    #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..))]
+    pub active_timeout: u64,
+    /// Persist all generated flow records into this historical store.
+    #[arg(long)]
+    pub store: Option<PathBuf>,
+    /// Historical CQL on aggregated flows, identical to crepe query STORE QUERY.
+    #[arg(long)]
+    pub query: Option<String>,
+    /// Sort descending by a counter; flows/count requires --group or a grouped query.
+    #[arg(short = 'O', long, value_parser = ["packets", "bytes", "flows", "count", "timestamp"])]
+    pub sort: Option<String>,
+    /// Group/correlate flow endpoints, e.g. src.ip,dst.ip (also totals packets/bytes).
+    #[arg(long)]
+    pub group: Option<String>,
+    /// Count selected flows, per group when --group is supplied.
+    #[arg(long)]
+    pub count: bool,
+    /// Maximum query result rows, after sorting/aggregation.
+    #[arg(short = 'n', long, value_parser = clap::value_parser!(u32).range(1..=10000))]
+    pub limit: Option<u32>,
+}
 #[derive(Subcommand)]
 pub(crate) enum Command {
-    /// Read PCAP/PCAPNG and apply an optional CQL filter.
+    /// Print the embedded project license and third-party notices (also retained by self-updates).
+    Licenses,
+    /// Check GitHub for a stable release and atomically update an archive installation.
+    Update {
+        /// Report availability without installing anything.
+        #[arg(long, conflicts_with = "output")]
+        check: bool,
+        /// Install to this NEW path instead of replacing the running binary.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Read PCAP/PCAPNG packets and link frames with an optional packet/application filter.
     Read {
         file: PathBuf,
         #[command(flatten)]
         args: PacketArgs,
     },
     /// Aggregate TCP/UDP packets into bounded bidirectional flows.
-    Flows {
-        file: PathBuf,
-        /// Packet filter, applied BEFORE aggregation; counters cover selected packets only.
-        filter: Option<String>,
-        #[arg(long, value_enum, default_value_t = FilterSyntax::Auto)]
-        filter_syntax: FilterSyntax,
-        #[arg(long, value_enum, default_value_t = Format::Table)]
-        format: Format,
-        #[arg(long, default_value_t = 65536, value_parser = clap::value_parser!(u32).range(1..=1_000_000))]
-        max_flows: u32,
-        /// Show expanded directional counters, flags and end reasons instead of one row per flow.
-        #[arg(long)]
-        details: bool,
-        #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..))]
-        tcp_idle: u64,
-        #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..))]
-        udp_idle: u64,
-        #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..))]
-        active_timeout: u64,
-    },
+    #[command(
+        after_help = "Packet filters (before aggregation):\n  'src 192.0.2.10'                  tcpdump/BPF\n  'ip.src == 192.0.2.10'            Wireshark field alias\n\nFlow queries (same CQL as crepe query; after aggregation):\n  crepe flows traffic.pcap --query '* | sort packets desc | limit 10'\n  crepe flows traffic.pcap 'bytes > 1000 | sort bytes desc'\n  crepe flows traffic.pcap '* | count'\n  crepe flows traffic.pcap '* | group src.ip,dst.ip | sort count desc'\n\nCreate and reuse a flow database:\n  crepe flows traffic.pcap --store ./flows\n  crepe flows ./flows '* | sort bytes desc | limit 10'\n  crepe query ./flows '* | group src.ip | sort bytes desc'\n\nCorrelate by conversation identity (64-character flow_id from query output):\n  crepe query ./flows '* | select flow.id,src.ip,dst.ip,packets,bytes'\n  crepe trace ./flows FLOW_ID\nFor DNS/TLS/HTTP correlation use forensics FILE --store CASE instead; a flow-only\nstore contains flow records, not packet/application observations.\n\nFlows are bidirectional. In flow queries src/dst are canonical left/right endpoints.\nPacket prefilters can reduce counters; --query filters complete aggregated flows.\nQuery output is limited to 10,000 rows; --store retains all generated records."
+    )]
+    Flows(FlowArgs),
     /// Analyze DNS, TLS hello, HTTP/1.1 and SSH metadata after IP/TCP reassembly.
     Analyze {
         file: PathBuf,
@@ -90,17 +129,20 @@ pub(crate) enum Command {
         stream_idle: u64,
     },
     /// Deep network analysis: packets, flows, reassembly and application metadata.
-    #[command(alias = "choclate")]
+    #[command(name = "inspect", aliases = ["chocolate", "choclate"])]
     Chocolate(RecipeArgs),
     /// Forensic case: persistent history, statistics, timeline and trace.
     #[command(
         long_about = "Analyze packets, flows and DNS/TLS/HTTP/SSH metadata. File input is fully processed before JSON Lines are printed (up to 10,000 observations). Use --store PATH to retain all observations, then crepe query PATH 'YOUR QUERY'. Live input streams observations as they become available. No arguments opens source selection. Suzette retains a forensic case by default in ./crepe-cases/case-*/history; --store chooses its location. Use timeline and trace to investigate the retained observations. Decoders are shared with chocolate, but the forensic history is retained automatically. The source capture is not copied.",
         after_help = "Examples:\n  crepe suzette traffic.pcap --store history\n  crepe query history '* | limit 20'\n  crepe suzette --interface lo --duration 10"
     )]
+    #[command(name = "forensics", alias = "suzette")]
     Suzette(RecipeArgs),
     /// Run with your own configuration.
+    #[command(name = "run", alias = "maison")]
     Maison(RecipeArgs),
     /// The full recipe: all currently implemented observations.
+    #[command(name = "full", alias = "complete")]
     Complete(RecipeArgs),
     /// Run a configured live sensor under a service manager.
     Daemon {

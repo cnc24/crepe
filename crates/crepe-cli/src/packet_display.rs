@@ -3,7 +3,7 @@ use crepe_core::{Endpoint, Protocol};
 use crepe_packet::PacketView;
 use std::fmt::Write;
 
-fn timestamp(value: Option<&str>) -> String {
+pub(crate) fn timestamp(value: Option<&str>) -> String {
     let Some(ns) = value.and_then(|v| v.parse::<i128>().ok()) else {
         return "time unknown".into();
     };
@@ -176,6 +176,24 @@ pub(crate) fn line(view: &PacketView<'_>) -> String {
             _ => "message",
         };
         let _ = write!(result, " {label}, type {kind}, code {code}");
+    }
+    if p.proto == Protocol::Tcp {
+        if let Some(line) = crate::application::http_line(view.payload) {
+            let _ = write!(
+                result,
+                ", HTTP: {}",
+                crate::application::text(line.as_bytes())
+            );
+        } else if view.payload.starts_with(b"SSH-") {
+            let first = view
+                .payload
+                .split(|b| *b == b'\n')
+                .next()
+                .unwrap_or_default();
+            let _ = write!(result, ", SSH: {}", crate::application::text(first));
+        } else if let Some(protocol) = crate::application::protocol(view) {
+            let _ = write!(result, ", {}", protocol.to_uppercase());
+        }
     }
     let _ = write!(result, ", wire {} bytes", p.header.original_len);
     if !p.vlans.is_empty() {

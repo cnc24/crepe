@@ -1,10 +1,12 @@
 //! Keep the two filter grammars separate; BPF is compiled by libpcap itself.
 use crate::args::FilterSyntax;
 use crepe_capture::Record;
-use crepe_core::{PacketEvent, Result};
+use crepe_core::Result;
 
 pub(crate) struct Filter {
     cql: Option<crepe_query::Expr>,
+    application: Option<String>,
+    link: Option<String>,
     #[cfg(feature = "live")]
     bpf: Option<crepe_capture::live::PacketFilter>,
 }
@@ -12,14 +14,46 @@ impl Filter {
     pub fn new(expression: Option<&str>, syntax: FilterSyntax) -> Result<Self> {
         let mut result = Self {
             cql: None,
+            application: None,
+            link: None,
             #[cfg(feature = "live")]
             bpf: None,
         };
         let Some(expression) = expression else {
             return Ok(result);
         };
+        if matches!(syntax, FilterSyntax::Auto) {
+            let name = expression.trim().to_ascii_lowercase();
+            if ["http", "dns", "tls", "ssh"].contains(&name.as_str()) {
+                result.application = Some(name);
+                return Ok(result);
+            }
+            if ["arp", "lldp", "eapol"].contains(&name.as_str()) {
+                result.link = Some(name);
+                return Ok(result);
+            }
+        }
         // Dotted CQL field names are unambiguous; preserve useful typed CQL errors.
-        let cql_fields = expression.contains("src.")
+        let cql_fields = [
+            "ip.src",
+            "ip.dst",
+            "ip.addr",
+            "ipv6.",
+            "tcp.port",
+            "tcp.srcport",
+            "tcp.dstport",
+            "udp.port",
+            "udp.srcport",
+            "udp.dstport",
+        ]
+        .iter()
+        .any(|name| expression.contains(name))
+            || (expression
+                .split(|c: char| !c.is_ascii_alphanumeric())
+                .any(|word| ["http", "dns", "tls", "ssh"].contains(&word))
+                && crepe_query::parse(expression).is_ok())
+            || ["tcp", "udp", "icmp", "icmpv6", "ip", "ipv6"].contains(&expression.trim())
+            || expression.contains("src.")
             || expression.contains("dst.")
             || (expression
                 .trim_start_matches([' ', '(', '!'])
@@ -48,8 +82,20 @@ impl Filter {
         let _ = record;
         Ok(true)
     }
-    pub fn matches(&self, event: &PacketEvent) -> bool {
-        self.cql.as_ref().is_none_or(|e| e.matches(event))
+    pub fn link_matches(&self, protocol: &str) -> bool {
+        self.cql.is_none()
+            && self.application.is_none()
+            && self.link.as_ref().is_none_or(|name| name == protocol)
+    }
+    pub fn view_matches(&self, view: &crepe_packet::PacketView<'_>) -> bool {
+        self.link.is_none()
+            && self.cql.as_ref().is_none_or(|e| {
+                e.matches_application(&view.event, crate::application::protocol(view))
+            })
+            && self
+                .application
+                .as_ref()
+                .is_none_or(|name| crate::application::protocol(view) == Some(name.as_str()))
     }
     #[cfg(feature = "live")]
     pub fn ethernet_prefilter(&self) -> Option<String> {

@@ -875,7 +875,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-analysis"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-capture",
  "crepe-core",
@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-capture"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
  "crepe-packet",
@@ -901,7 +901,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-cli"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "chrono",
  "clap",
@@ -916,15 +916,19 @@ dependencies = [
  "crepe-query",
  "crepe-storage",
  "ctrlc",
+ "flate2",
  "pcap-file",
+ "semver",
  "serde",
  "serde_json",
+ "sha2",
+ "tar",
  "tempfile",
 ]
 
 [[package]]
 name = "crepe-collector"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
  "serde",
@@ -932,14 +936,14 @@ dependencies = [
 
 [[package]]
 name = "crepe-core"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "crepe-dns"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
  "serde",
@@ -947,7 +951,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-engine"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-analysis",
  "crepe-capture",
@@ -965,7 +969,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-files"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
  "httparse",
@@ -974,7 +978,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-flow"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-capture",
  "crepe-core",
@@ -983,14 +987,14 @@ dependencies = [
 
 [[package]]
 name = "crepe-fragment"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
 ]
 
 [[package]]
 name = "crepe-packet"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
  "etherparse",
@@ -998,7 +1002,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-plugin"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
  "serde",
@@ -1008,7 +1012,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-protocol"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
  "httparse",
@@ -1017,7 +1021,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-query"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-capture",
  "crepe-core",
@@ -1029,7 +1033,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-security"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
  "ipnet",
@@ -1039,7 +1043,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-storage"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "blake3",
  "crepe-core",
@@ -1054,7 +1058,7 @@ dependencies = [
 
 [[package]]
 name = "crepe-stream"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "crepe-core",
 ]
@@ -1936,6 +1940,16 @@ name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
+
+[[package]]
+name = "filetime"
+version = "0.2.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5c287a33c7f0a620c38e641e7f60827713987b3c0f26e8ddc9462cc69cf75759"
+dependencies = [
+ "cfg-if",
+ "libc",
+]
 
 [[package]]
 name = "find-msvc-tools"
@@ -3300,6 +3314,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tar"
+version = "0.4.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f6221d9a6003c78398e3b239969f352578258df48c8eb051caadae0015bc840"
+dependencies = [
+ "filetime",
+ "libc",
+ "xattr",
+]
+
+[[package]]
 name = "target-lexicon"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4170,6 +4195,16 @@ name = "writeable"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ad82d2a33cdc9674dc7465672f271e096168fcdbe0f799d9e6db8c5892679dc"
+
+[[package]]
+name = "xattr"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
+dependencies = [
+ "libc",
+ "rustix",
+]
 
 [[package]]
 name = "yoke"

@@ -18,7 +18,7 @@ impl<W: Write> Output<W> {
             (Format::Json, _) => return Ok(()),
             (Format::Table, false) => "TIME (UTC)          SOURCE > DESTINATION: PROTOCOL DETAILS (absolute TCP seq/ack)",
             (Format::Table, true) => &flow_header,
-            (Format::Csv, false) => "sequence,timestamp_ns,src_ip,src_port,dst_ip,dst_port,proto,captured_len,original_len,section,interface,vlans,tcp_flags",
+            (Format::Csv, false) => "sequence,timestamp_ns,src_ip,src_port,dst_ip,dst_port,proto,captured_len,original_len,section,interface,vlans,tcp_flags,src_mac,dst_mac,ether_type,linktype",
             (Format::Csv, true) => "flow_id,start_ns,end_ns,a_ip,a_port,b_ip,b_port,proto,packets_a,packets_b,bytes_a,bytes_b,tcp_flags_a,tcp_flags_b,section,interface,vlans,end_reason",
         };
         writeln!(self.writer, "{text}").map_err(output_error)
@@ -46,7 +46,7 @@ impl<W: Write> Output<W> {
             }
             Format::Csv => writeln!(
                 self.writer,
-                "{},{},{},{},{},{},{},{},{},{},{},{},{}",
+                "{},{},{},{},{},{},{},{},{},{},{},{},{},,,,",
                 p.header.sequence,
                 p.header.timestamp_ns.as_deref().unwrap_or(""),
                 p.src.ip,
@@ -63,6 +63,151 @@ impl<W: Write> Output<W> {
             )
             .map_err(output_error),
         }
+    }
+    pub fn packet_details(
+        &mut self,
+        record: &crepe_capture::Record<'_>,
+        view: &crepe_packet::PacketView<'_>,
+        level: u8,
+    ) -> Result<()> {
+        if let Some((ip, _)) = crepe_packet::network(record.data, record.linktype)? {
+            if ip[0] >> 4 == 4 {
+                writeln!(self.writer,"    IPv4 ttl {}, id {}, tos 0x{:02x}, flags/offset 0x{:04x}, checksum 0x{:04x}, length {}",
+                    ip[8],u16::from_be_bytes([ip[4],ip[5]]),ip[1],u16::from_be_bytes([ip[6],ip[7]]),u16::from_be_bytes([ip[10],ip[11]]),ip.len()).map_err(output_error)?;
+            } else {
+                writeln!(
+                    self.writer,
+                    "    IPv6 hop limit {}, next header {}, length {}",
+                    ip[7],
+                    ip[6],
+                    ip.len()
+                )
+                .map_err(output_error)?;
+            }
+        }
+        writeln!(
+            self.writer,
+            "    record {}, LINKTYPE {}, captured {} / wire {} bytes",
+            record.header.sequence,
+            record.linktype,
+            record.header.captured_len,
+            record.header.original_len
+        )
+        .map_err(output_error)?;
+        if level >= 2 && crate::application::http_line(view.payload).is_some() {
+            let end = view
+                .payload
+                .windows(4)
+                .position(|b| b == b"\r\n\r\n")
+                .map(|n| n + 4)
+                .unwrap_or(view.payload.len());
+            self.payload(&view.payload[..end], true, false)?;
+        }
+        Ok(())
+    }
+    pub fn payload(&mut self, bytes: &[u8], ascii: bool, hex: bool) -> Result<()> {
+        if ascii && !bytes.is_empty() {
+            for line in crate::application::text(bytes).lines() {
+                writeln!(self.writer, "    {line}").map_err(output_error)?;
+            }
+        }
+        if hex {
+            for (i, row) in bytes.chunks(16).enumerate() {
+                let encoded = row
+                    .iter()
+                    .map(|b| format!("{b:02x}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                let printable: String = row
+                    .iter()
+                    .map(|&b| {
+                        if (32..=126).contains(&b) {
+                            char::from(b)
+                        } else {
+                            '.'
+                        }
+                    })
+                    .collect();
+                writeln!(self.writer, "    {:04x}  {encoded:47}  {printable}", i * 16)
+                    .map_err(output_error)?;
+            }
+        }
+        Ok(())
+    }
+    pub fn link(&mut self, p: &crate::link_display::LinkRecord<'_>) -> Result<()> {
+        match self.format {
+            Format::Json => self.json(p),
+            Format::Table => writeln!(
+                self.writer,
+                "{} {} > {}: {} {}, wire {} bytes{}",
+                crate::packet_display::timestamp(p.header.timestamp_ns.as_deref()),
+                p.src_mac.as_deref().unwrap_or("link"),
+                p.dst_mac.as_deref().unwrap_or("link"),
+                p.proto.to_uppercase(),
+                p.details,
+                p.header.original_len,
+                if p.vlans.is_empty() {
+                    String::new()
+                } else {
+                    format!(", vlan {:?}", p.vlans)
+                }
+            )
+            .map_err(output_error),
+            Format::Csv => writeln!(
+                self.writer,
+                "{},{},,,,,{},{},{},{},{},{},,{},{},{},{}",
+                p.header.sequence,
+                p.header.timestamp_ns.as_deref().unwrap_or(""),
+                p.proto,
+                p.header.captured_len,
+                p.header.original_len,
+                p.header.section,
+                p.header.interface,
+                vlans(&p.vlans),
+                p.src_mac.as_deref().unwrap_or(""),
+                p.dst_mac.as_deref().unwrap_or(""),
+                p.ether_type,
+                p.linktype
+            )
+            .map_err(output_error),
+        }
+    }
+    pub fn query_value(&mut self, value: &serde_json::Value) -> Result<()> {
+        self.json(value)
+    }
+    pub fn query_columns(&mut self, value: &serde_json::Value, header: bool) -> Result<()> {
+        let row = value
+            .as_object()
+            .ok_or_else(|| Error::new("CREPE-CQL-001", "expected a query result object"))?;
+        let csv = matches!(self.format, Format::Csv);
+        let quote = |s: String| {
+            if csv {
+                format!("\"{}\"", s.replace('"', "\"\""))
+            } else {
+                s
+            }
+        };
+        let separator = if csv { "," } else { "\t" };
+        if header {
+            writeln!(
+                self.writer,
+                "{}",
+                row.keys()
+                    .map(|s| quote(s.clone()))
+                    .collect::<Vec<_>>()
+                    .join(separator)
+            )
+            .map_err(output_error)?;
+        }
+        writeln!(
+            self.writer,
+            "{}",
+            row.values()
+                .map(|v| quote(v.to_string()))
+                .collect::<Vec<_>>()
+                .join(separator)
+        )
+        .map_err(output_error)
     }
     pub fn flow(&mut self, f: &FlowRecord, details: bool) -> Result<()> {
         let reason =

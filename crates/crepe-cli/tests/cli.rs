@@ -121,7 +121,7 @@ fn export_roundtrip_limit_and_no_overwrite() {
     );
     let csv = String::from_utf8(result.stdout).unwrap();
     assert_eq!(csv.lines().count(), 3);
-    assert!(csv.lines().all(|line| line.split(',').count() == 13));
+    assert!(csv.lines().all(|line| line.split(',').count() == 17));
     let replay = cli()
         .arg("read")
         .arg(&capture)
@@ -833,7 +833,7 @@ fn recipe_help_and_processing_feedback_are_factual() {
     let help = cli().args(["--serious", "--help"]).output().unwrap();
     let text = String::from_utf8(help.stdout).unwrap();
     assert!(help.status.success());
-    assert!(text.contains("Analysis recipes:"));
+    assert!(text.contains("ALIAS"));
     assert!(!text.contains("Bon appétit"));
     let help = cli().args(["suzette", "--help"]).output().unwrap();
     assert!(String::from_utf8(help.stdout)
@@ -954,4 +954,372 @@ fn suzette_retains_a_queryable_case_by_default() {
     assert!(!String::from_utf8(menu.stdout)
         .unwrap()
         .contains("Bon appétit"));
+}
+
+#[test]
+fn layer_two_application_filters_and_payload_are_visible() {
+    let capture = fixture("fixtures/packet-display.pcap");
+    let read = cli().arg("read").arg(&capture).output().unwrap();
+    assert!(
+        read.status.success(),
+        "{}",
+        String::from_utf8_lossy(&read.stderr)
+    );
+    let text = String::from_utf8(read.stdout).unwrap();
+    assert_eq!(text.lines().count(), 7);
+    assert!(text.contains("ARP Request who-has 192.0.2.1 tell 192.0.2.10"));
+    assert!(text.contains("LLDP") && text.contains("vlan [7]"));
+    assert!(text.contains("HTTP: GET /search?q=crepe HTTP/1.1"));
+    assert!(text.contains("HTTP: HTTP/1.1 200 OK"));
+    let http = cli()
+        .arg("read")
+        .arg(&capture)
+        .args(["http", "-A"])
+        .output()
+        .unwrap();
+    assert!(http.status.success());
+    let text = String::from_utf8(http.stdout).unwrap();
+    assert!(text.contains("Host: example.test") && text.contains("hello web"));
+    assert!(text.contains("\\x1b[31munsafe") && !text.contains('\u{1b}'));
+    assert!(!text.contains("not an HTTP request"));
+    let json = cli()
+        .arg("read")
+        .arg(&capture)
+        .args(["http", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(json.status.success());
+    assert_eq!(String::from_utf8(json.stdout).unwrap().lines().count(), 2);
+    let arp = cli()
+        .arg("read")
+        .arg(&capture)
+        .args(["arp", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(arp.status.success());
+    let row: serde_json::Value = serde_json::from_slice(&arp.stdout).unwrap();
+    assert_eq!(row["proto"], "arp");
+    assert_eq!(row["src_mac"], "02:00:00:00:00:01");
+    assert!(row.get("src").is_none());
+    let csv = cli()
+        .arg("read")
+        .arg(&capture)
+        .args(["--format", "csv"])
+        .output()
+        .unwrap();
+    assert!(csv.status.success());
+    assert!(String::from_utf8(csv.stdout)
+        .unwrap()
+        .lines()
+        .all(|l| l.split(',').count() == 17));
+    let hex = cli()
+        .arg("read")
+        .arg(&capture)
+        .args(["arp", "-X"])
+        .output()
+        .unwrap();
+    assert!(hex.status.success());
+    assert!(String::from_utf8(hex.stdout)
+        .unwrap()
+        .contains("0000  00 01 08 00"));
+    let dir = tempfile::tempdir().unwrap();
+    let selected = dir.path().join("arp.pcap");
+    let export = cli()
+        .arg("read")
+        .arg(&capture)
+        .args(["arp", "-w"])
+        .arg(&selected)
+        .output()
+        .unwrap();
+    assert!(export.status.success());
+    let replay = cli()
+        .arg("read")
+        .arg(&selected)
+        .args(["--format", "json"])
+        .output()
+        .unwrap();
+    assert!(replay.status.success());
+    assert_eq!(replay.stdout, arp.stdout);
+    let ip = cli()
+        .arg("read")
+        .arg(&capture)
+        .args(["proto == tcp", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(ip.status.success());
+    assert_eq!(String::from_utf8(ip.stdout).unwrap().lines().count(), 3);
+}
+
+#[test]
+fn forensic_alias_and_update_help() {
+    for cmd in ["forensics", "update"] {
+        let result = cli().args([cmd, "--help"]).output().unwrap();
+        assert!(result.status.success());
+    }
+    let help = cli().arg("--help").output().unwrap();
+    assert!(String::from_utf8(help.stdout)
+        .unwrap()
+        .contains("forensics"));
+}
+
+#[cfg(unix)]
+#[test]
+fn update_checks_and_installs_verified_archive_without_touching_current_binary() {
+    use sha2::{Digest, Sha256};
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir().unwrap();
+    let platform = if cfg!(target_os = "macos") {
+        "darwin-arm64"
+    } else {
+        "linux-x86_64"
+    };
+    let name = format!("crepe-9.0.0-{platform}.tar.gz");
+    let archive = root.path().join(&name);
+    let gz = flate2::write::GzEncoder::new(
+        std::fs::File::create(&archive).unwrap(),
+        flate2::Compression::default(),
+    );
+    let mut builder = tar::Builder::new(gz);
+    let body = b"#!/bin/sh\nprintf 'crepe 9.0.0\\n'\n";
+    let mut header = tar::Header::new_gnu();
+    header.set_size(body.len() as u64);
+    header.set_mode(0o755);
+    header.set_cksum();
+    builder
+        .append_data(&mut header, "crepe", &body[..])
+        .unwrap();
+    builder.into_inner().unwrap().finish().unwrap();
+    let digest = format!("{:x}", Sha256::digest(std::fs::read(&archive).unwrap()));
+    std::fs::write(
+        root.path().join(format!("{name}.sha256")),
+        format!("{digest}  {name}\n"),
+    )
+    .unwrap();
+    let base = "https://github.com/cnc24/crepe/releases/download/v9.0.0";
+    let metadata = serde_json::json!({"tag_name":"v9.0.0","draft":false,"prerelease":false,"assets":[
+        {"name":name,"browser_download_url":format!("{base}/{name}"),"digest":format!("sha256:{digest}")},
+        {"name":format!("{name}.sha256"),"browser_download_url":format!("{base}/{name}.sha256")}
+    ]});
+    std::fs::write(root.path().join("release.json"), metadata.to_string()).unwrap();
+    let curl = root.path().join("curl");
+    std::fs::write(&curl,b"#!/bin/sh\nwhile [ $# -gt 0 ]; do\n if [ \"$1\" = --output ]; then shift; destination=$1; fi\n url=$1; shift\ndone\ncase \"$url\" in\n */latest) name=release.json ;;\n *) name=${url##*/} ;;\nesac\ncp \"$CREPE_TEST_RELEASE_DIR/$name\" \"$destination\"\n").unwrap();
+    std::fs::set_permissions(&curl, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let command = || {
+        let mut cmd = cli();
+        cmd.env("CREPE_TEST_RELEASE_DIR", root.path()).env(
+            "PATH",
+            format!(
+                "{}:{}",
+                root.path().display(),
+                std::env::var("PATH").unwrap()
+            ),
+        );
+        cmd
+    };
+    let check = command().args(["update", "--check"]).output().unwrap();
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    assert!(String::from_utf8(check.stderr)
+        .unwrap()
+        .contains("Update available"));
+    let installed = root.path().join("installed-crepe");
+    let update = command()
+        .args(["update", "--output"])
+        .arg(&installed)
+        .output()
+        .unwrap();
+    assert!(
+        update.status.success(),
+        "{}",
+        String::from_utf8_lossy(&update.stderr)
+    );
+    assert_eq!(std::fs::read(&installed).unwrap(), body);
+    let rerun = command()
+        .args(["update", "--output"])
+        .arg(&installed)
+        .output()
+        .unwrap();
+    assert!(!rerun.status.success());
+    assert_eq!(std::fs::read(&installed).unwrap(), body);
+    std::fs::write(&archive, b"tampered").unwrap();
+    let bad = root.path().join("bad-install");
+    let update = command()
+        .args(["update", "--output"])
+        .arg(&bad)
+        .output()
+        .unwrap();
+    assert!(!update.status.success());
+    assert!(!bad.exists());
+    assert!(String::from_utf8(update.stderr)
+        .unwrap()
+        .contains("SHA-256 mismatch"));
+}
+
+#[test]
+fn wireshark_fields_and_combined_verbose_flags() {
+    let capture = fixture("fixtures/packet-display.pcap");
+    for (filter, expected) in [
+        ("ip.src == 192.0.2.10", 2),
+        ("ip.addr == 192.0.2.10", 3),
+        ("tcp.port == 8088", 2),
+        ("tcp.port != 8088", 1),
+        ("udp.port == 8088", 0),
+        ("http and ip.src == 192.0.2.10", 1),
+        ("http && tcp.dstport == 8088", 1),
+        ("ipv6.src != 2001:db8::1", 0),
+    ] {
+        let run = cli()
+            .arg("read")
+            .arg(&capture)
+            .args([filter, "--format", "json"])
+            .output()
+            .unwrap();
+        assert!(
+            run.status.success(),
+            "{filter}: {}",
+            String::from_utf8_lossy(&run.stderr)
+        );
+        assert_eq!(
+            String::from_utf8(run.stdout).unwrap().lines().count(),
+            expected,
+            "{filter}"
+        );
+    }
+    let verbose = cli()
+        .arg("read")
+        .arg(&capture)
+        .args(["http", "-vvX"])
+        .output()
+        .unwrap();
+    assert!(
+        verbose.status.success(),
+        "{}",
+        String::from_utf8_lossy(&verbose.stderr)
+    );
+    let text = String::from_utf8(verbose.stdout).unwrap();
+    assert!(text.contains("IPv4 ttl 64"));
+    assert!(text.contains("Host: example.test"));
+    assert!(text.contains("0000  45 00")); // tcpdump-style -X starts at IP, not TCP payload.
+    let link = cli()
+        .arg("read")
+        .arg(&capture)
+        .args(["http", "-XX"])
+        .output()
+        .unwrap();
+    assert!(link.status.success());
+    assert!(String::from_utf8(link.stdout)
+        .unwrap()
+        .contains("0000  02 00 00 00 00 02"));
+}
+
+#[test]
+fn flow_database_and_direct_queries_use_the_same_rows_and_grammar() {
+    let root = tempfile::tempdir().unwrap();
+    let store = root.path().join("flows");
+    let capture = fixture("fixtures/flows.pcap");
+    let save = cli()
+        .arg("flows")
+        .arg(&capture)
+        .arg("--store")
+        .arg(&store)
+        .output()
+        .unwrap();
+    assert!(
+        save.status.success(),
+        "{}",
+        String::from_utf8_lossy(&save.stderr)
+    );
+    assert!(store.join("schema.json").exists());
+    for query in [
+        "* | sort packets desc | limit 2",
+        "bytes > 0 | sort bytes desc | limit 3",
+        "* | count",
+        "* | group src.ip,dst.ip | sort count desc",
+        "ip.src == 192.0.2.10 | count",
+    ] {
+        let direct = cli()
+            .arg("flows")
+            .arg(&capture)
+            .args(["--query", query, "--format", "json"])
+            .output()
+            .unwrap();
+        let history = cli().arg("query").arg(&store).arg(query).output().unwrap();
+        let reopened = cli()
+            .arg("flows")
+            .arg(&store)
+            .args([query, "--format", "json"])
+            .output()
+            .unwrap();
+        for run in [&direct, &history, &reopened] {
+            assert!(
+                run.status.success(),
+                "{query}: {}",
+                String::from_utf8_lossy(&run.stderr)
+            );
+        }
+        let decode = |bytes: &[u8]| {
+            let mut rows: Vec<_> = String::from_utf8_lossy(bytes)
+                .lines()
+                .map(|line| {
+                    serde_json::from_str::<serde_json::Value>(line)
+                        .unwrap()
+                        .to_string()
+                })
+                .collect();
+            rows.sort();
+            rows
+        };
+        assert_eq!(decode(&direct.stdout), decode(&history.stdout), "{query}");
+        assert_eq!(decode(&reopened.stdout), decode(&history.stdout), "{query}");
+    }
+    let shorthand = cli()
+        .arg("flows")
+        .arg(&capture)
+        .args(["* | count", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(shorthand.status.success());
+    let options = cli()
+        .arg("flows")
+        .arg(&capture)
+        .args([
+            "--group", "src.ip", "--sort", "flows", "--limit", "2", "--format", "json",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        options.status.success(),
+        "{}",
+        String::from_utf8_lossy(&options.stderr)
+    );
+    let identities = cli()
+        .arg("query")
+        .arg(&store)
+        .arg("* | select flow.id | limit 1")
+        .output()
+        .unwrap();
+    assert!(identities.status.success());
+    let identity: serde_json::Value = serde_json::from_slice(&identities.stdout).unwrap();
+    let trace = cli()
+        .arg("trace")
+        .arg(&store)
+        .arg(identity["flow_id"].as_str().unwrap())
+        .output()
+        .unwrap();
+    assert!(trace.status.success());
+    assert!(!trace.stdout.is_empty());
+    let help = cli().args(["flows", "-h"]).output().unwrap();
+    let text = String::from_utf8(help.stdout).unwrap();
+    for phrase in [
+        "sort packets",
+        "sort bytes",
+        "group src.ip",
+        "crepe query",
+        "crepe trace",
+    ] {
+        assert!(text.contains(phrase), "{phrase}");
+    }
 }

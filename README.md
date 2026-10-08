@@ -1,7 +1,9 @@
 # Crepe
 
 Linux-first network research and analysis in Rust, developed and tested on macOS.
-Version 1.2 adds tcpdump filters, readable packet summaries and the `chocolate` recipe spelling.
+Version 1.2.3 adds `crepe update`, Layer-2 packet output, application-protocol shortcuts,
+HTTP summaries/dumps, factual command names with recipe aliases, selected Wireshark
+fields, and a flow database/query workflow.
 Version 1.2.2 shows one flow per table row; `flows --details` adds expanded counters and state. See the [platform release gates](docs/RELEASE-1.1.md)
 and [design choices and limits](docs/DESIGN-STATUS.md).
 

@@ -283,38 +283,43 @@ impl Sink<'_, '_> {
         }
         Ok(())
     }
-    fn flow(&mut self, mut f: crepe_flow::FlowRecord) -> Result<()> {
-        f.flow_id = identity(&[&self.config.sensor, self.source, &f.flow_id]);
-        let key = crepe_flow::FlowKey {
-            a: f.a.clone(),
-            b: f.b.clone(),
-            proto: f.proto,
-            section: f.section,
-            interface: f.interface,
-            vlans: f.vlans.clone(),
-        };
-        let mut row = Row {
-            flow_id: identity(&[
-                &self.config.sensor,
-                self.source,
-                &serde_json::to_string(&key).expect("serializable flow key"),
-            ]),
-            sensor: self.config.sensor.clone(),
-            source: self.source.into(),
-            event_type: "flow.end".into(),
-            src_ip: Some(f.a.ip.to_string()),
-            dst_ip: Some(f.b.ip.to_string()),
-            src_port: f.a.port.map(u64::from),
-            dst_port: f.b.port.map(u64::from),
-            proto: Some(f.proto.to_string()),
-            packets: f.packets_a.checked_add(f.packets_b),
-            bytes: f.bytes_a.checked_add(f.bytes_b),
-            payload: json(&f)?,
-            ..Default::default()
-        };
-        time(&mut row, Some(f.end_ns));
-        self.push(row)
+    fn flow(&mut self, f: crepe_flow::FlowRecord) -> Result<()> {
+        self.push(flow_row(&self.config.sensor, self.source, f)?)
     }
+}
+/// Convert a flow to the historical schema with the same conversation identity as packet analysis.
+pub fn flow_row(sensor: &str, source: &str, mut f: crepe_flow::FlowRecord) -> Result<Row> {
+    f.flow_id = identity(&[sensor, source, &f.flow_id]);
+    let key = crepe_flow::FlowKey {
+        a: f.a.clone(),
+        b: f.b.clone(),
+        proto: f.proto,
+        section: f.section,
+        interface: f.interface,
+        vlans: f.vlans.clone(),
+    };
+    let mut row = Row {
+        flow_id: identity(&[
+            sensor,
+            source,
+            &serde_json::to_string(&key).expect("serializable flow key"),
+        ]),
+        sensor: sensor.to_string(),
+        source: source.into(),
+        event_type: "flow.end".into(),
+        src_ip: Some(f.a.ip.to_string()),
+        dst_ip: Some(f.b.ip.to_string()),
+        src_port: f.a.port.map(u64::from),
+        dst_port: f.b.port.map(u64::from),
+        proto: Some(f.proto.to_string()),
+        packets: f.packets_a.checked_add(f.packets_b),
+        bytes: f.bytes_a.checked_add(f.bytes_b),
+        payload: json(&f)?,
+        ..Default::default()
+    };
+    time(&mut row, Some(f.end_ns));
+    row.event_id = identity(&[sensor, source, "flow-instance", &row.payload]);
+    Ok(row)
 }
 /// Multiplexed sensor inputs; external rows must use this session's sensor/source.
 pub enum Input<'a> {

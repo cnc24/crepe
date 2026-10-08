@@ -308,3 +308,11 @@ This does not delete captures, stores, configuration or the source checkout.
 For everyday commands, profiles, limits and services, continue with the
 [English operations manual](OPERATIONS.md). Licensing is explained in
 [LICENSING.md](LICENSING.md).
+
+## Updating an existing installation
+
+Starting with 1.2.3, archive installations can run `crepe update --check` and
+`crepe update`. Versions before 1.2.3 must first install a current download.
+DEB/RPM/Homebrew users should use their package installer; Cargo users should
+reinstall with their chosen features. See the [update reference](OPERATIONS.md#updating-123-and-later)
+for prerequisites, permissions, verification and standalone `--output` installs.
