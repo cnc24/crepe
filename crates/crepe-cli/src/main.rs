@@ -41,7 +41,7 @@ fn main() -> ExitCode {
         early.iter().any(|a| a == "--log-format=json")
             || early.windows(2).any(|w| w == ["--log-format", "json"]),
     );
-    let command = Cli::command();
+    let command = help::configure(Cli::command());
     let template = help::root(&command);
     let cli = match command
         .help_template(template)

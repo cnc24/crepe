@@ -32,12 +32,13 @@ pub(crate) struct PacketArgs {
     /// Skip malformed packet payloads; capture-container and I/O errors still stop.
     #[arg(long)]
     pub tolerant: bool,
+    /// Output encoding: readable table, JSON Lines, or CSV.
     #[arg(long, value_enum, default_value_t = Format::Table)]
     pub format: Format,
-    /// Print captured transport/link payload as safe ASCII text (table output only).
+    /// Print packet bytes after the link header as safe ASCII (table output only).
     #[arg(short = 'A', long, conflicts_with = "hex")]
     pub ascii: bool,
-    /// Print captured transport/link payload as hex and ASCII (table output only).
+    /// Hex and ASCII after the link header; repeat (-XX) to include it (table only).
     #[arg(short = 'X', long, action = clap::ArgAction::Count)]
     pub hex: u8,
     /// More packet metadata (-v); application headers (-vv). Combines with -X/-XX.
@@ -58,17 +59,22 @@ pub(crate) struct FlowArgs {
     pub filter: Option<String>,
     #[arg(long, value_enum, default_value_t = FilterSyntax::Auto)]
     pub filter_syntax: FilterSyntax,
+    /// Output encoding: readable table, JSON Lines, or CSV.
     #[arg(long, value_enum, default_value_t = Format::Table)]
     pub format: Format,
+    /// Maximum tracked flows; at capacity, emit the flow with the earliest deadline.
     #[arg(long, default_value_t = 65536, value_parser = clap::value_parser!(u32).range(1..=1_000_000))]
     pub max_flows: u32,
     /// Show expanded directional counters, flags and end reasons instead of one row per flow.
     #[arg(long)]
     pub details: bool,
+    /// TCP inactivity timeout in capture-timestamp seconds.
     #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..))]
     pub tcp_idle: u64,
+    /// UDP inactivity timeout in capture-timestamp seconds.
     #[arg(long, default_value_t = 30, value_parser = clap::value_parser!(u64).range(1..))]
     pub udp_idle: u64,
+    /// Maximum flow lifetime in capture-timestamp seconds before emitting a record.
     #[arg(long, default_value_t = 300, value_parser = clap::value_parser!(u64).range(1..))]
     pub active_timeout: u64,
     /// Persist all generated flow records into this historical store.
@@ -105,6 +111,7 @@ pub(crate) enum Command {
     },
     /// Read PCAP/PCAPNG packets and link frames with an optional packet/application filter.
     Read {
+        /// Input PCAP/PCAPNG capture file.
         file: PathBuf,
         #[command(flatten)]
         args: PacketArgs,
@@ -116,15 +123,20 @@ pub(crate) enum Command {
     Flows(FlowArgs),
     /// Analyze DNS, TLS hello, HTTP/1.1 and SSH metadata after IP/TCP reassembly.
     Analyze {
+        /// Input PCAP/PCAPNG capture file.
         file: PathBuf,
         #[arg(long, value_enum, default_value_t = Format::Json)]
         format: Format,
+        /// UDP/TCP port used for DNS decoding.
         #[arg(long, default_value_t = 53)]
         dns_port: u16,
+        /// Maximum simultaneously tracked TCP streams.
         #[arg(long, default_value_t = 1024, value_parser = clap::value_parser!(u32).range(1..=65536))]
         max_streams: u32,
+        /// Maximum buffered reassembly bytes.
         #[arg(long, default_value_t = 4194304, value_parser = clap::value_parser!(u32).range(1..=268435456))]
         max_buffer_bytes: u32,
+        /// Stream inactivity timeout in capture-timestamp seconds.
         #[arg(long, default_value_t = 120, value_parser = clap::value_parser!(u64).range(1..))]
         stream_idle: u64,
     },
@@ -156,8 +168,10 @@ pub(crate) enum Command {
     Profiles,
     /// Import observations as an atomic Parquet batch.
     Ingest {
+        /// Input PCAP/PCAPNG capture file.
         file: PathBuf,
         #[arg(long)]
+        /// Historical store directory containing committed observation batches.
         store: PathBuf,
         #[arg(long)]
         config: Option<PathBuf>,
@@ -169,12 +183,15 @@ pub(crate) enum Command {
     },
     /// Query historical observations with a CQL pipeline (JSON Lines).
     Query {
+        /// Historical store directory containing committed observation batches.
         store: PathBuf,
         #[arg(default_value = "*")]
+        /// Quoted historical filter/pipeline; defaults to all observations (bounded).
         cql: String,
     },
     /// Compact a stopped store into a NEW destination, optionally retaining recent rows.
     Compact {
+        /// Historical store directory containing committed observation batches.
         store: PathBuf,
         #[arg(long)]
         output: PathBuf,
@@ -183,26 +200,40 @@ pub(crate) enum Command {
         since_ms: Option<i64>,
     },
     /// Show all observations for a conversation ID in time order.
-    Trace { store: PathBuf, flow_id: String },
+    Trace {
+        /// Existing historical store directory.
+        store: PathBuf,
+        /// 64-character hexadecimal conversation ID from query output.
+        flow_id: String,
+    },
     /// Show a chronological observation timeline.
     Timeline {
+        /// Historical store directory containing committed observation batches.
         store: PathBuf,
+        /// Maximum chronological observations to print (1..10000).
         #[arg(long,default_value_t=1000,value_parser=clap::value_parser!(u32).range(1..=10000))]
         limit: u32,
     },
     /// Validate and print effective configuration.
-    Config { file: Option<PathBuf> },
+    Config {
+        /// Optional TOML file layered over system/user configuration.
+        file: Option<PathBuf>,
+    },
     /// Receive NetFlow v5/v9 and IPFIX over UDP. Default: loopback only.
     #[command(visible_alias = "banane")]
     Collect {
+        /// Local UDP bind address, optionally prefixed with udp://.
         #[arg(long, default_value = "127.0.0.1:2055", value_parser = parse_listen)]
         listen: std::net::SocketAddr,
+        /// Wall-clock collection duration in seconds.
         #[arg(long,default_value_t=30,value_parser=clap::value_parser!(u64).range(1..=86400))]
         duration: u64,
+        /// Stop after this many received datagrams, including templates and malformed input.
         #[arg(long,value_parser=clap::value_parser!(u64).range(1..))]
         count: Option<u64>,
         #[arg(long)]
         store: Option<PathBuf>,
+        /// Sensor identity attached to stored export observations.
         #[arg(long, default_value = "local")]
         sensor: String,
     },
@@ -226,6 +257,7 @@ pub(crate) enum Command {
         #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
         count: Option<u64>,
         #[arg(long)]
+        /// Request promiscuous capture mode on the selected interface.
         promisc: bool,
         #[command(flatten)]
         args: PacketArgs,

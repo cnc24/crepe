@@ -8,7 +8,11 @@ installation, PATH setup, capture permissions and a first working example.
 Examples below use the included synthetic captures. For a real capture replace
 `example.pcap` with your file. Put filters in single quotes so the shell does not
 interpret parentheses, `!`, `&` or `|`. `[]` below means optional arguments.
-Every command supports `--help`.
+Every command supports `-h` and `--help`, including workflow examples. Start with
+`crepe profiles -h` to choose a recipe, `crepe read -h` for packet filters and
+byte dumps, `crepe flows -h` for flow statistics, or `crepe query -h` for history.
+Aliases share their command's help: `crepe chocolate -h` and `crepe inspect -h`
+describe the same workflow.
 
 | Command | Alias | What it does / common options |
 | --- | --- | --- |
