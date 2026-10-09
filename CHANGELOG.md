@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.4.0 — 2026-10-09
+
+- Complete the target v1 investigation path with bounded reassembly packet provenance, hash-verified multi-packet export and replay tests.
+- Add opt-in original/live raw retention, automatic evidence lookup, rotation, expiry and `raw-prune`; preserve metadata independently.
+- Share typed CQL predicates across packet execution, history and declarative CPL; support notice, tag, metric and log with versioned parents and central notice limits.
+- Add composable profile dependency plans and module manifests; skip disabled protocol parsers and apply policies to collector-only recipes.
+- Add CNAME/cross-source correlation, related timelines, URL indicators and independent security retention cutoffs.
+- Separate new-SYN tuple reuse from retransmissions; flow JSON schema 4 and analysis JSON schema 2 expose the new contracts. Historical schema stays 2.
+- Show useful help for bare `crepe`; document end-to-end investigation, policies, retention and target acceptance.
+
 ## 1.3.0 — 2026-10-08
 
 - Introduce schema-2 history with observed-instance `flow_id`, tuple-level `conversation_id` and explicit assignment status; retain read-only access to schema-1 stores. Upgrade by reimporting original captures into a new store.

@@ -6,6 +6,9 @@ license-file.workspace = true
 [lints]
 workspace = true
 [dependencies]
+crepe-query = { path = "../crepe-query" }
+blake3 = "1"
+url = "2"
 crepe-core = { path = "../crepe-core" }
 serde.workspace = true
 serde_json.workspace = true

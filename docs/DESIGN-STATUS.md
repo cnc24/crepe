@@ -4,8 +4,8 @@ The user-supplied [original design](DESIGN-ORIGINAL.md) is the planning source.
 The [English manual](OPERATIONS.md) describes executable commands and precise
 limits. Milestone/release acceptance is tracked in [RELEASE-1.1.md](RELEASE-1.1.md).
 
-Version 1.1.0 is the initial source-available publication candidate and must
-pass its own final CI gates. Earlier private prototype history is not included.
+Version 1.1.0 was the initial source-available publication candidate. Current
+target acceptance is tracked below; earlier private prototype history is not included.
 
 | Area | Implemented | Deliberate limits / future work |
 | --- | --- | --- |
@@ -26,21 +26,16 @@ sketches (file layout, parser library, nested configuration, CLI examples) are
 not all literal compatibility requirements; supported alternatives above retain
 the functional goals and keep the scope bounded.
 
-## 1.3.0 target-architecture milestone
+## 1.4.0 target-architecture acceptance
 
-New schema-2 histories distinguish observed flow instances from tuple-level
-conversation IDs. A bounded packet ancestry index is shared by serial and live
-worker pipelines. Existing schema-1 histories remain read-only with original
-semantics; migration is an explicit reimport, not inference over old rows.
+The October target's v1 paths now include observed connection identities,
+reassembly packet-reference sets, automatic opt-in raw retention/discovery,
+CNAME and opt-in cross-source relationships, related timelines, one typed event
+predicate AST, composable profile dependency plans and declarative CPL with all
+four specified actions. Telemetry/security cutoffs and raw retention are separate.
 
-`correlate` performs bounded, on-demand historical DNS-answer/TLS-SNI association
-with client/sensor/source/link/time/TTL checks, ambiguity labels and Intel event
-references. `evidence` follows source-event links and verifies a supplied original
-capture before locating/exporting one referenced packet. `fixtures/target-story.pcap`
-exercises the path, including tuple reuse.
-
-This does not complete the whole target: arbitrary cross-capture relationships,
-CNAME chains, automatic raw capture discovery/retention, complete reassembly-byte
-provenance, a unified CQL AST, composable profile dependency planning and the full
-CPL language remain future work. Clock uncertainty and unobserved TCP boundaries
-are explicitly not resolved by these commands.
+[Target acceptance](TARGET-ACCEPTANCE.md) maps each requirement to implementation
+and tests. [Release 1.4.0](RELEASE-1.4.0.md) records validation. Bounds and unknowns
+remain visible: no endpoint emulation, guaranteed capture completeness, clock
+alignment inference or unlimited memory. GUI, clustering, decryption and active
+blocking remain explicitly outside the target's v1 scope.

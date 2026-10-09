@@ -248,12 +248,10 @@ fn persist_notice(
 }
 
 /// Nonblocking exporter input for a combined packet/export sensor.
-#[cfg(feature = "live")]
 pub struct ExportSource {
     socket: UdpSocket,
     decoder: crepe_collector::Collector,
 }
-#[cfg(feature = "live")]
 impl ExportSource {
     pub fn bind(address: SocketAddr) -> Result<Self> {
         let socket = UdpSocket::bind(address).map_err(error)?;
@@ -327,4 +325,74 @@ impl ExportSource {
         }
         Ok(())
     }
+}
+
+/// Collector recipes share policy, plugin, checkpoint and live-window execution.
+pub fn collect_recipe(args: &crate::args::RecipeArgs, config: &crepe_engine::Config) -> Result<()> {
+    let source = crepe_storage::identity(&[
+        &config.sensor,
+        &SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(error)?
+            .as_nanos()
+            .to_string(),
+        &std::process::id().to_string(),
+    ]);
+    let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let signal = cancelled.clone();
+    ctrlc::set_handler(move || signal.store(true, std::sync::atomic::Ordering::Relaxed))
+        .map_err(error)?;
+    let mut exporter = ExportSource::bind(
+        args.listen
+            .unwrap_or_else(|| "127.0.0.1:2055".parse().unwrap()),
+    )?;
+    let window = args
+        .query
+        .as_deref()
+        .map(|q| crate::windows::Window::new(q, args.query_interval))
+        .transpose()?
+        .map(std::cell::RefCell::new);
+    let start = Instant::now();
+    crepe_engine::stream_inputs(
+        &source,
+        args.store.as_deref(),
+        config,
+        |emit| {
+            while start.elapsed().as_secs() < args.duration
+                && !cancelled.load(std::sync::atomic::Ordering::Relaxed)
+            {
+                exporter.poll(&config.sensor, &source, &mut |row| {
+                    emit(crepe_engine::Input::Observation(Box::new(row)))
+                })?;
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_err(error)?
+                    .as_nanos();
+                emit(crepe_engine::Input::Tick(
+                    i128::try_from(now).map_err(error)?,
+                ))?;
+                if let Some(window) = &window {
+                    window.borrow_mut().flush(false)?;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
+            Ok(())
+        },
+        &mut |row| {
+            crate::metrics::observe(row);
+            crate::metrics::EVENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if let Some(window) = &window {
+                return window.borrow_mut().push(row);
+            }
+            if row.event_type == "flow.export" {
+                print_json(&serde_json::from_str::<serde_json::Value>(&row.payload).map_err(error)?)
+            } else {
+                print_json(row)
+            }
+        },
+    )?;
+    if let Some(window) = &window {
+        window.borrow_mut().flush(true)?;
+    }
+    Ok(())
 }

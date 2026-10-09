@@ -9,6 +9,47 @@ use std::{
     },
     thread::JoinHandle,
 };
+static POLICY: std::sync::LazyLock<std::sync::Mutex<std::collections::BTreeMap<String, u64>>> =
+    std::sync::LazyLock::new(|| std::sync::Mutex::new(Default::default()));
+pub(crate) fn observe(row: &crepe_storage::Row) {
+    if row.event_type != "policy.metric" && row.event_type != "policy.log" {
+        return;
+    }
+    if row.event_type == "policy.log" {
+        crate::report!("Policy log: {}", row.payload);
+        return;
+    }
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&row.payload) else {
+        return;
+    };
+    if let (Some(name), Some(increment)) = (
+        value.pointer("/effect/data/name").and_then(|v| v.as_str()),
+        value
+            .pointer("/effect/data/increment")
+            .and_then(|v| v.as_u64()),
+    ) {
+        if let Ok(mut counters) = POLICY.lock() {
+            if counters.len() < 128 || counters.contains_key(name) {
+                let counter = counters.entry(name.into()).or_default();
+                *counter = counter.saturating_add(increment);
+            }
+        }
+    }
+}
+fn policy_metrics() -> String {
+    let Ok(counters) = POLICY.lock() else {
+        return String::new();
+    };
+    counters
+        .iter()
+        .map(|(name, total)| {
+            format!(
+                "crepe_policy_counter_total{{policy={}}} {total}\n",
+                serde_json::to_string(name).unwrap()
+            )
+        })
+        .collect()
+}
 pub(crate) static PACKETS: AtomicU64 = AtomicU64::new(0);
 pub(crate) static BYTES: AtomicU64 = AtomicU64::new(0);
 pub(crate) static EVENTS: AtomicU64 = AtomicU64::new(0);
@@ -62,7 +103,7 @@ impl Server {
                         }
                         let (status, body) = if request[..size].starts_with(b"GET /metrics HTTP/1.")
                         {
-                            ("200 OK", format!("# TYPE crepe_capture_records_total counter\ncrepe_capture_records_total {}\n# TYPE crepe_capture_bytes_total counter\ncrepe_capture_bytes_total {}\n# TYPE crepe_events_total counter\ncrepe_events_total {}\n# TYPE crepe_export_datagrams_total counter\ncrepe_export_datagrams_total {}\n# TYPE crepe_malformed_exports_total counter\ncrepe_malformed_exports_total {}\n", PACKETS.load(Ordering::Relaxed), BYTES.load(Ordering::Relaxed), EVENTS.load(Ordering::Relaxed), DATAGRAMS.load(Ordering::Relaxed), MALFORMED.load(Ordering::Relaxed)))
+                            ("200 OK", format!("# TYPE crepe_capture_records_total counter\ncrepe_capture_records_total {}\n# TYPE crepe_capture_bytes_total counter\ncrepe_capture_bytes_total {}\n# TYPE crepe_events_total counter\ncrepe_events_total {}\n# TYPE crepe_export_datagrams_total counter\ncrepe_export_datagrams_total {}\n# TYPE crepe_malformed_exports_total counter\ncrepe_malformed_exports_total {}\n", PACKETS.load(Ordering::Relaxed), BYTES.load(Ordering::Relaxed), EVENTS.load(Ordering::Relaxed), DATAGRAMS.load(Ordering::Relaxed), MALFORMED.load(Ordering::Relaxed)) + &policy_metrics())
                         } else {
                             ("404 Not Found", "Not found\n".into())
                         };

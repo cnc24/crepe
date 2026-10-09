@@ -6,9 +6,10 @@
 
 
 Linux-first network research and analysis in Rust, developed and tested on macOS.
-Version 1.3.0 adds observed connection-instance IDs, DNS/TLS correlation and verified
-packet evidence retrieval. **Old schema-1 stores remain read-only; reimport captures
-into a new store to upgrade.** See [migration and evidence](docs/OPERATIONS.md#connection-identity-and-evidence-130).
+Version 1.4.0 completes the bounded v1 investigation path: reassembly packet
+evidence, opt-in raw rotation/retention, CPL actions, combined profiles, shared
+typed predicates and related timelines. See the [target acceptance matrix](docs/TARGET-ACCEPTANCE.md). **Old schema-1 stores remain read-only; reimport captures
+into a new store to upgrade.** See [migration and evidence](docs/OPERATIONS.md#connection-identity-and-evidence-140).
 Version 1.2.3 adds `crepe update`, Layer-2 packet output, application-protocol shortcuts,
 HTTP summaries/dumps, factual command names with recipe aliases, selected Wireshark
 fields, and a flow database/query workflow.
@@ -24,7 +25,7 @@ windows, compressed/partitioned history, crash recovery and native Linux packagi
 
 **New user? Start with [preparation and installation](docs/GETTING-STARTED.md).**
 It covers macOS/Linux prerequisites, installation, your first capture, permissions
-and troubleshooting. [Download v1.3.0](https://github.com/cnc24/crepe/releases/tag/v1.3.0)
+and troubleshooting. [Download v1.4.0](https://github.com/cnc24/crepe/releases/tag/v1.4.0)
 for Apple Silicon macOS or Linux x86-64; ready-made binaries need no Rust/Cargo.
 
 **[User manual: commands, profiles and troubleshooting](docs/OPERATIONS.md)**

@@ -1539,7 +1539,7 @@ fn target_story_has_distinct_instances_correlation_and_verified_evidence() {
     assert!(reference.status.success());
     assert_eq!(
         json_rows(&reference.stdout)[0]["availability"],
-        "not_checked"
+        "unavailable"
     );
     let out = dir.path().join("evidence.pcap");
     let evidence = cli()
@@ -1565,7 +1565,8 @@ fn target_story_has_distinct_instances_correlation_and_verified_evidence() {
         .output()
         .unwrap();
     assert!(replay.status.success());
-    assert_eq!(json_rows(&replay.stdout).len(), 1);
+    assert_eq!(json_rows(&replay.stdout).len(), 2);
+    assert_eq!(json_rows(&evidence.stdout)[0]["provenance_complete"], true);
     let overwrite = cli()
         .arg("evidence")
         .arg(&store)
@@ -1597,4 +1598,237 @@ fn target_story_has_distinct_instances_correlation_and_verified_evidence() {
         .unwrap();
     assert!(missing.status.success());
     assert_eq!(json_rows(&missing.stdout)[0]["availability"], "missing");
+}
+
+fn target_json_rows(bytes: &[u8]) -> Vec<serde_json::Value> {
+    std::str::from_utf8(bytes)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect()
+}
+#[test]
+fn target_reassembly_retention_cpl_and_expiry_preserve_metadata() {
+    let tmp = tempfile::tempdir().unwrap();
+    let store = tmp.path().join("case");
+    let rules = tmp.path().join("rules.cpl");
+    std::fs::write(
+        &rules,
+        r#"rule watch version "1" on tls.client_hello where tls.server_name == "example.test" {
+        notice(severity: high, message: "Lab TLS"); tag(name: "case", value: "lab");
+        metric(name: "tls_matches", value: 1); log(level: info, message: "TLS observed");
+    }
+    rule intel-rule version "1" on intel.match
+    where proto == tcp { tag("intel-context"); }"#,
+    )
+    .unwrap();
+    let feed = tmp.path().join("intel.jsonl");
+    std::fs::write(
+        &feed,
+        r#"{"kind":"domain","value":"example.test","source":"test"}"#,
+    )
+    .unwrap();
+    let config = tmp.path().join("config.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "policy_rules = {}\nintel_feed = {}\n",
+            serde_json::to_string(&rules).unwrap(),
+            serde_json::to_string(&feed).unwrap()
+        ),
+    )
+    .unwrap();
+    let capture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/target-reassembly.pcap");
+    let run = cli()
+        .arg("forensics")
+        .arg(&capture)
+        .arg("--store")
+        .arg(&store)
+        .arg("--keep-raw")
+        .arg("--config")
+        .arg(&config)
+        .output()
+        .unwrap();
+    assert!(
+        run.status.success(),
+        "{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let query = |filter: &str| {
+        let out = cli().arg("query").arg(&store).arg(filter).output().unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        target_json_rows(&out.stdout)
+    };
+    let tls = query("type == tls.client_hello");
+    assert_eq!(tls.len(), 1);
+    assert_eq!(tls[0]["identity_status"], "instance");
+    let notice = query("type == notice.policy");
+    assert_eq!(notice.len(), 1);
+    for kind in ["policy.metric", "policy.log"] {
+        assert_eq!(query(&format!("type == {kind}")).len(), 1);
+    }
+    assert_eq!(query("type == policy.tag").len(), 2);
+    let id = notice[0]["event_id"].as_str().unwrap();
+    let exported = tmp.path().join("proof.pcap");
+    let proof = cli()
+        .arg("evidence")
+        .arg(&store)
+        .arg(id)
+        .arg("--write")
+        .arg(&exported)
+        .output()
+        .unwrap();
+    assert!(
+        proof.status.success(),
+        "{}",
+        String::from_utf8_lossy(&proof.stderr)
+    );
+    let proof = target_json_rows(&proof.stdout);
+    assert_eq!(proof[0]["availability"], "verified");
+    assert_eq!(proof[0]["provenance_complete"], true);
+    assert_eq!(proof[0]["references"].as_array().unwrap().len(), 5);
+    let replay = cli()
+        .arg("analyze")
+        .arg(&exported)
+        .args(["--format", "json"])
+        .output()
+        .unwrap();
+    assert!(
+        replay.status.success(),
+        "{}",
+        String::from_utf8_lossy(&replay.stderr)
+    );
+    assert!(target_json_rows(&replay.stdout)
+        .iter()
+        .any(|r| r["protocol"]["server_name"] == "example.test"));
+    // Expire only the retained raw entry without sleeping or touching the original.
+    let manifest = store.join("raw/manifest.json");
+    let mut m: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    for e in m["entries"].as_array_mut().unwrap() {
+        e["expires"] = serde_json::json!(0);
+    }
+    std::fs::write(&manifest, serde_json::to_vec(&m).unwrap()).unwrap();
+    let prune = cli().arg("raw-prune").arg(&store).output().unwrap();
+    assert!(prune.status.success());
+    assert_eq!(query("type == tls.client_hello").len(), 1);
+    assert!(capture.exists());
+    let unavailable = cli().arg("evidence").arg(&store).arg(id).output().unwrap();
+    assert!(unavailable.status.success());
+    assert_ne!(
+        target_json_rows(&unavailable.stdout)[0]["availability"],
+        "verified"
+    );
+}
+#[test]
+fn no_arguments_and_profile_dependency_plan_are_actionable() {
+    let out = cli().output().unwrap();
+    assert!(out.status.success());
+    assert!(out.stderr.is_empty());
+    assert!(String::from_utf8_lossy(&out.stdout).contains("Usage:"));
+    let out = cli()
+        .args(["plan", "--profile", "chocolate", "--profile", "banane"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let rows = target_json_rows(&out.stdout);
+    let modules = rows[0]["modules"].as_array().unwrap();
+    assert!(modules.contains(&serde_json::json!("collector")));
+    assert!(modules.contains(&serde_json::json!("tcp-stream")));
+    let out = cli()
+        .args(["plan", "--profile", "chocolate", "--disable", "tcp-stream"])
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("requires disabled tcp-stream"));
+}
+
+#[test]
+fn live_raw_rotation_and_related_timeline_use_verified_references() {
+    let temp = tempfile::tempdir().unwrap();
+    let store = temp.path().join("live");
+    let config = crepe_engine::Config {
+        raw: crepe_engine::raw::Policy {
+            enabled: true,
+            max_bytes: 16384,
+            rotate_bytes: 1024,
+            max_age_seconds: 3600,
+        },
+        ..Default::default()
+    };
+    let source = crepe_storage::identity(&["live-session-provenance-test"]);
+    let mut events = Vec::new();
+    crepe_engine::stream(
+        &source,
+        Some(&store),
+        &config,
+        |emit| {
+            crepe_capture::read_records(
+                &include_bytes!("../../../fixtures/target-reassembly.pcap")[..],
+                emit,
+            )
+        },
+        &mut |row| {
+            events.push(row.clone());
+            Ok(())
+        },
+    )
+    .unwrap();
+    let tls = events
+        .iter()
+        .find(|r| r.event_type == "tls.client_hello")
+        .unwrap();
+    let proof = cli()
+        .arg("evidence")
+        .arg(&store)
+        .arg(&tls.event_id)
+        .output()
+        .unwrap();
+    assert!(
+        proof.status.success(),
+        "{}",
+        String::from_utf8_lossy(&proof.stderr)
+    );
+    assert_eq!(
+        target_json_rows(&proof.stdout)[0]["packets"]
+            .as_array()
+            .unwrap()
+            .len(),
+        5
+    );
+    let timeline = cli()
+        .arg("timeline")
+        .arg(&store)
+        .args(["--related", &tls.event_id])
+        .output()
+        .unwrap();
+    assert!(
+        timeline.status.success(),
+        "{}",
+        String::from_utf8_lossy(&timeline.stderr)
+    );
+    let story = target_json_rows(&timeline.stdout);
+    assert_eq!(story[0]["relations"][0]["status"], "inferred");
+    assert!(!story[0]["truncated"].as_bool().unwrap());
+    let manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(store.join("raw/manifest.json")).unwrap()).unwrap();
+    let chunk = store
+        .join("raw")
+        .join(manifest["entries"][0]["file"].as_str().unwrap());
+    let mut bytes = std::fs::read(&chunk).unwrap();
+    bytes[0] ^= 1;
+    std::fs::write(chunk, bytes).unwrap();
+    let proof = cli()
+        .arg("evidence")
+        .arg(&store)
+        .arg(&tls.event_id)
+        .output()
+        .unwrap();
+    assert!(!proof.status.success());
+    assert!(String::from_utf8_lossy(&proof.stderr).contains("hash"));
 }

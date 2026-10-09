@@ -27,6 +27,17 @@ impl Index {
             }
         }
     }
+    pub fn apply_evidence(&self, evidence: &crepe_core::PacketEvidence, row: &mut Row) {
+        let anchors: std::collections::BTreeSet<_> = evidence
+            .records
+            .iter()
+            .filter_map(|r| self.anchors.get(&(r.section, r.interface, r.sequence)))
+            .collect();
+        if anchors.len() == 1 {
+            row.flow_id = instance(&row.conversation_id, **anchors.first().unwrap());
+            row.identity_status = "instance".into();
+        }
+    }
     pub fn apply(&self, p: &PacketEvent, row: &mut Row) {
         if let Some(anchor) =
             self.anchors

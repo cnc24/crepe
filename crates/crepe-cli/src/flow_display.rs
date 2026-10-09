@@ -101,6 +101,7 @@ pub(crate) fn summary(f: &FlowRecord) -> String {
         EndReason::Capacity => "capacity eviction",
         EndReason::TcpFin => "FIN both ways",
         EndReason::TcpReset => "TCP reset",
+        EndReason::TcpReuse => "new SYN / tuple reuse",
     };
     let state = match f.tcp_state {
         Some(TcpState::SynSeen) => "SYN seen",

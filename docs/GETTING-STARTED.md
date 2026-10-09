@@ -6,16 +6,16 @@ you use **`crepe`**; Cargo is needed only for source builds and Cargo-managed up
 
 ## Install a ready-made release (recommended)
 
-Download [Crepe v1.3.0](https://github.com/cnc24/crepe/releases/tag/v1.3.0).
+Download [Crepe v1.4.0](https://github.com/cnc24/crepe/releases/tag/v1.4.0).
 Choose the asset for your operating system and CPU. **Rust, Cargo and compiler
 installation are not required for these binaries.**
 
 | System | Download |
 | --- | --- |
-| macOS Apple Silicon (arm64) | `crepe-1.3.0-darwin-arm64.tar.gz` and its `.sha256` file |
-| Ubuntu/Debian x86-64 | `crepe_1.3.0_amd64.deb` and its `.sha256` file |
-| Fedora x86-64 | `crepe-1.3.0-1.x86_64.rpm` and its `.sha256` file |
-| Other compatible Linux x86-64 | `crepe-1.3.0-linux-x86_64.tar.gz` and its `.sha256` file |
+| macOS Apple Silicon (arm64) | `crepe-1.4.0-darwin-arm64.tar.gz` and its `.sha256` file |
+| Ubuntu/Debian x86-64 | `crepe_1.4.0_amd64.deb` and its `.sha256` file |
+| Fedora x86-64 | `crepe-1.4.0-1.x86_64.rpm` and its `.sha256` file |
+| Other compatible Linux x86-64 | `crepe-1.4.0-linux-x86_64.tar.gz` and its `.sha256` file |
 
 The Linux binaries need libpcap and compatible system libraries. Native package
 managers check dependencies; the generic archive is not a statically linked,
@@ -32,11 +32,11 @@ Download the macOS archive and checksum into Downloads, then run:
 
 ```sh
 cd "$HOME/Downloads"
-shasum -a 256 -c crepe-1.3.0-darwin-arm64.tar.gz.sha256
-mkdir -p crepe-1.3.0
-tar -xzf crepe-1.3.0-darwin-arm64.tar.gz -C crepe-1.3.0
+shasum -a 256 -c crepe-1.4.0-darwin-arm64.tar.gz.sha256
+mkdir -p crepe-1.4.0
+tar -xzf crepe-1.4.0-darwin-arm64.tar.gz -C crepe-1.4.0
 mkdir -p "$HOME/.local/bin"
-install -m 755 crepe-1.3.0/crepe "$HOME/.local/bin/crepe"
+install -m 755 crepe-1.4.0/crepe "$HOME/.local/bin/crepe"
 export PATH="$HOME/.local/bin:$PATH"
 crepe --version
 crepe chocolate
@@ -54,12 +54,12 @@ commands for your distribution:
 
 ```sh
 # Ubuntu/Debian
-sha256sum -c crepe_1.3.0_amd64.deb.sha256
-sudo apt install ./crepe_1.3.0_amd64.deb
+sha256sum -c crepe_1.4.0_amd64.deb.sha256
+sudo apt install ./crepe_1.4.0_amd64.deb
 
 # Fedora: use these instead
-sha256sum -c crepe-1.3.0-1.x86_64.rpm.sha256
-sudo dnf install ./crepe-1.3.0-1.x86_64.rpm
+sha256sum -c crepe-1.4.0-1.x86_64.rpm.sha256
+sudo dnf install ./crepe-1.4.0-1.x86_64.rpm
 ```
 
 Then run `crepe --version` and `crepe chocolate`. These packages also contain a
@@ -317,6 +317,23 @@ DEB/RPM/Homebrew users should use their package installer; Cargo users should
 reinstall with their chosen features. See the [update reference](OPERATIONS.md#updating-123-and-later)
 for prerequisites, permissions, verification and standalone `--output` installs.
 
-Version 1.3.0 writes schema-2 stores. Existing schema-1 stores remain readable but
+Version 1.4.0 writes schema-2 stores. Existing schema-1 stores remain readable but
 read-only; reimport original captures into a new directory to upgrade. See the
 [migration reference](OPERATIONS.md#connection-identity-and-evidence-130).
+
+## Retain a reproducible investigation
+
+From a cloned repository:
+
+```sh
+crepe plan --profile chocolate --profile banane
+crepe forensics fixtures/target-reassembly.pcap --store ./case-v2 --keep-raw
+crepe correlate ./case-v2
+crepe timeline ./case-v2 --related EVENT_ID
+crepe evidence ./case-v2 EVENT_ID --write evidence.pcap
+```
+
+Replace EVENT_ID with a full event ID from the query/correlation output. Raw
+retention is **off by default**. `--keep-raw` enables the default 256 MiB / 24-hour
+raw policy; configure `[raw]` to change it. See the manual for CPL and retention.
+Running `crepe` without arguments now displays help and exits successfully.

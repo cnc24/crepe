@@ -8,6 +8,7 @@ license-file.workspace = true
 workspace = true
 
 [dependencies]
+crepe-query = { path = "../crepe-query" }
 ipnet.workspace = true
 crepe-core = { path = "../crepe-core" }
 serde.workspace = true

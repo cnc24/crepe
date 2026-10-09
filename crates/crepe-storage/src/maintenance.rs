@@ -17,6 +17,14 @@ pub struct Compaction {
 /// Copy a quiescent schema-2 store to a new compacted store, preserving row IDs.
 /// Rows without timestamps are retained. Failed attempts remove only the new destination.
 pub fn compact(source: &Path, destination: &Path, since_ms: Option<i64>) -> Result<Compaction> {
+    compact_classes(source, destination, since_ms, None)
+}
+pub fn compact_classes(
+    source: &Path,
+    destination: &Path,
+    since_ms: Option<i64>,
+    security_since_ms: Option<i64>,
+) -> Result<Compaction> {
     validate_root(source)?;
     if super::schema_version(source)? != 2 {
         return Err(super::err("schema-1 compaction requires the old release; reimport captures into a NEW schema-2 store to upgrade identity semantics"));
@@ -62,7 +70,11 @@ pub fn compact(source: &Path, destination: &Path, since_ms: Option<i64>) -> Resu
     // create_dir is an exclusive claim: never replace a pre-existing destination.
     fs::create_dir(destination).map_err(err)?;
     let result = (|| {
-        let id = identity(&["compaction", &batches.join(":"), &format!("{since_ms:?}")]);
+        let id = identity(&[
+            "compaction",
+            &batches.join(":"),
+            &format!("{since_ms:?}:{security_since_ms:?}"),
+        ]);
         let mut writer = Writer::begin(destination, &id)?;
         let mut result = Compaction {
             read: 0,
@@ -84,7 +96,15 @@ pub fn compact(source: &Path, destination: &Path, since_ms: Option<i64>) -> Resu
                 for line in bytes.split(|b| *b == b'\n').filter(|b| !b.is_empty()) {
                     let row: Row = serde_json::from_slice(line).map_err(err)?;
                     result.read += 1;
-                    if since_ms
+                    let security = ["intel.", "notice.", "anomaly.", "policy."]
+                        .iter()
+                        .any(|prefix| row.event_type.starts_with(prefix));
+                    let cutoff = if security {
+                        security_since_ms.or(since_ms)
+                    } else {
+                        since_ms
+                    };
+                    if cutoff
                         .zip(row.timestamp_ms)
                         .is_some_and(|(since, timestamp)| timestamp < since)
                     {

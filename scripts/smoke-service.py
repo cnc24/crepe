@@ -11,10 +11,15 @@ with tempfile.TemporaryDirectory(prefix='crepe-service-') as directory:
         interface = 'lo0' if os.uname().sysname == 'Darwin' else 'lo'
         config = root/'sensor.toml'
         config.write_text(f'interface = "{interface}"\nstore = "{root / "history"}"\ndns_port = {port}\n')
+        policy = root / 'service.cpl'
+        policy.write_text('on dns.query where dns.qname == "test.example." { metric(name: "dns_policy_test", value: 1); log(level: info, message: "Policy observed DNS"); }')
+        with config.open('a') as f:
+            f.write('policy_rules = ' + json.dumps(str(policy)) + '\n')
         proc = subprocess.Popen([binary, '--serious', '--log-format', 'json', '--metrics', '127.0.0.1:0', 'daemon', '--config', str(config), '--duration', '30'], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         try:
             line = json.loads(proc.stderr.readline()); assert line['message'].startswith('Metrics listening'), line
             metrics_port = int(line['message'].rsplit(':', 1)[1])
+            line = json.loads(proc.stderr.readline()); assert 'Effective modules:' in line['message'], line
             line = json.loads(proc.stderr.readline()); assert 'Live analysis' in line['message'], line
             line = json.loads(proc.stderr.readline()); assert 'Capture ready' in line['message'], line
             query = struct.pack('!6H', 123, 0x100, 1, 0, 0, 0) + b'\x04test\x07example\x00' + struct.pack('!HH', 1, 1)
@@ -44,6 +49,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-service-') as directory:
                     if not part: break
                     response.extend(part)
             assert b'200 OK' in response and b'crepe_events_total ' in response, response
+            assert b'crepe_policy_counter_total{policy="dns_policy_test"} 1' in response, response
             events = int(response.split(b'crepe_events_total ')[-1].splitlines()[0]); assert events > 0
             proc.send_signal(signal.SIGTERM)
             _, err = proc.communicate(timeout=8)
@@ -57,6 +63,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-service-') as directory:
         # A hard crash releases the OS lock; the next session discards only its unpublished tail.
         crashed = subprocess.Popen([binary, '--serious', 'daemon', '--config', str(config), '--duration', '30'], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
         try:
+            assert 'Effective modules:' in crashed.stderr.readline()
             assert 'Live analysis' in crashed.stderr.readline()
             assert 'Capture ready' in crashed.stderr.readline()
             assert list((root/'history').glob('.staging-*'))

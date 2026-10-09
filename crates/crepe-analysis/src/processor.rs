@@ -1,6 +1,6 @@
 //! Link decoding and IP reassembly shared by offline analysis and ingestion.
 use crate::{Analyzer, Config, Event};
-use crepe_core::{EventHeader, Result};
+use crepe_core::{EventHeader, PacketEvidence, Result};
 use crepe_fragment::{Limits, Scope, Table};
 use std::borrow::Cow;
 
@@ -48,13 +48,17 @@ impl Processor {
             .as_deref()
             .and_then(|v| v.parse().ok())
             .unwrap_or(0);
-        let assembled = self.fragments.process(ip, &scope, now);
+        let assembled = self
+            .fragments
+            .process_referenced(ip, &scope, now, (&header).into());
         match assembled {
             Ok(Some(ip)) => {
                 let reassembled = matches!(ip, Cow::Owned(_));
                 if let Some(mut view) = crepe_packet::decode_view(&ip, header, 101)? {
                     view.event.vlans = vlans;
-                    self.analyzer.process(&view, |mut e| {
+                    let mut evidence = PacketEvidence::packet(&view.event.header);
+                    evidence.records = self.fragments.last_references.clone();
+                    self.analyzer.process_referenced(&view, evidence, |mut e| {
                         e.reassembled = reassembled;
                         emit(e)
                     })?;

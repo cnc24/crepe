@@ -99,8 +99,21 @@ pub(crate) struct FlowArgs {
 }
 #[derive(Subcommand)]
 pub(crate) enum Command {
+    /// Resolve profiles, module dependencies and resource settings without capturing traffic.
+    Plan(PlanArgs),
+    /// Apply raw-only retention to manifest-owned captures; historical observations remain intact.
+    RawPrune {
+        store: PathBuf,
+        #[arg(long, default_value_t = 86400)]
+        max_age_seconds: u64,
+        #[arg(long, default_value_t = 268435456)]
+        max_bytes: u64,
+    },
     /// Relate stored DNS answers to TLS ClientHello observations with explicit evidence.
     Correlate {
+        /// Permit same-sensor associations across captures; clock alignment remains unverified.
+        #[arg(long)]
+        cross_source: bool,
         /// Schema-2 history directory; narrow large selections with time bounds.
         store: PathBuf,
         /// Maximum DNS-to-TLS delay in seconds, also bounded by each answer's TTL.
@@ -122,8 +135,8 @@ pub(crate) enum Command {
         /// Original PCAP/PCAPNG; its content hash must match the stored source.
         #[arg(long)]
         capture: Option<PathBuf>,
-        /// Export the referenced packet to a NEW PCAP file.
-        #[arg(long, requires = "capture")]
+        /// Export the referenced reconstruction packets to a NEW PCAP file.
+        #[arg(long)]
         write: Option<PathBuf>,
     },
     /// Print the Crepe mascot and wordmark as plain ASCII.
@@ -221,6 +234,9 @@ pub(crate) enum Command {
     },
     /// Compact a stopped store into a NEW destination, optionally retaining recent rows.
     Compact {
+        /// Separate cutoff for Intel/notice/anomaly/policy rows (Unix milliseconds).
+        #[arg(long, allow_hyphen_values = true)]
+        security_since_ms: Option<i64>,
         /// Historical store directory containing committed observation batches.
         store: PathBuf,
         #[arg(long)]
@@ -229,15 +245,18 @@ pub(crate) enum Command {
         #[arg(long, allow_hyphen_values = true)]
         since_ms: Option<i64>,
     },
-    /// Show all observations for a conversation ID in time order.
+    /// Show all observations for an observed flow-instance ID in time order.
     Trace {
         /// Existing historical store directory.
         store: PathBuf,
-        /// 64-character hexadecimal conversation ID from query output.
+        /// 64-character hexadecimal flow.id from query output (conversation.id groups tuples).
         flow_id: String,
     },
     /// Show a chronological observation timeline.
     Timeline {
+        /// Focus on an event, related DNS/TLS flows and their Intel/policy evidence.
+        #[arg(long)]
+        related: Option<String>,
         /// Historical store directory containing committed observation batches.
         store: PathBuf,
         /// Maximum chronological observations to print (1..10000).
@@ -325,6 +344,13 @@ impl From<Profile> for crepe_engine::Profile {
 
 #[derive(Args)]
 pub(crate) struct RecipeArgs {
+    /// Combine profiles (repeatable). Their module sets are merged before dependency validation.
+    #[arg(long = "profile", value_enum)]
+    pub profiles: Vec<Profile>,
+    /// Explicitly retain raw captures under this store's separate rotation/retention policy.
+    #[arg(long, requires = "store")]
+    pub keep_raw: bool,
+
     /// Parallel live analysis workers; flow/stream budgets are divided across them.
     #[arg(long, value_parser = clap::value_parser!(u32).range(1..=16))]
     pub workers: Option<u32>,
@@ -352,11 +378,11 @@ pub(crate) struct RecipeArgs {
     /// Load your own sensor, recipe and resource settings.
     #[arg(long)]
     pub config: Option<PathBuf>,
-    /// Suppress a protocol module's observations (repeatable).
-    #[arg(long, value_parser = ["dns", "tls", "http", "ssh", "files", "notices"])]
+    /// Disable a module; required dependencies must also be resolved (repeatable).
+    #[arg(long, value_parser = ["packet", "flow", "ip-reassembly", "tcp-stream", "collector", "dns", "tls", "http", "ssh", "files", "intel", "policy", "notices"])]
     pub disable: Vec<String>,
     /// Re-enable a module suppressed by configuration (repeatable).
-    #[arg(long, value_parser = ["dns", "tls", "http", "ssh", "files", "notices"])]
+    #[arg(long, value_parser = ["packet", "flow", "ip-reassembly", "tcp-stream", "collector", "dns", "tls", "http", "ssh", "files", "intel", "policy", "notices"])]
     pub enable: Vec<String>,
     /// Continue past malformed packets and emit anomaly.decode observations.
     #[arg(long)]
@@ -375,4 +401,16 @@ fn parse_listen(value: &str) -> std::result::Result<std::net::SocketAddr, String
 pub(crate) enum LogFormat {
     Text,
     Json,
+}
+
+#[derive(Args)]
+pub(crate) struct PlanArgs {
+    #[arg(long)]
+    pub config: Option<PathBuf>,
+    #[arg(long = "profile", value_enum)]
+    pub profiles: Vec<Profile>,
+    #[arg(long)]
+    pub enable: Vec<String>,
+    #[arg(long)]
+    pub disable: Vec<String>,
 }

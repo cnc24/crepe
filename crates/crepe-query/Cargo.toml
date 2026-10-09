@@ -10,6 +10,7 @@ workspace = true
 [dependencies]
 crepe-core = { path = "../crepe-core" }
 ipnet.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 crepe-capture = { path = "../crepe-capture" }

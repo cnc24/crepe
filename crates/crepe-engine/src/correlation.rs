@@ -31,9 +31,13 @@ struct Binding<'a> {
     at: i128,
     ttl: u64,
     context: String,
+    chain: Vec<String>,
 }
 /// Accept a complete bounded observation selection. Caller must not silently truncate.
 pub fn relate(rows: &[Row], window_seconds: u64) -> Result<Vec<Value>> {
+    relate_sources(rows, window_seconds, false)
+}
+pub fn relate_sources(rows: &[Row], window_seconds: u64, cross_source: bool) -> Result<Vec<Value>> {
     if rows.len() >= 10000 || !(1..=3600).contains(&window_seconds) {
         return Err(error(
             "select fewer than 10000 observations and a window of 1..3600 seconds",
@@ -82,13 +86,6 @@ pub fn relate(rows: &[Row], window_seconds: u64) -> Result<Vec<Value>> {
                 continue;
             };
             let owner = name(owner);
-            let queried =
-                dns["questions"].as_array().into_iter().flatten().any(|q| {
-                    q["class"] == 1 && q["name"].as_str().is_some_and(|n| name(n) == owner)
-                });
-            if !queried {
-                continue;
-            }
             let Some(address) = answer["data"]["value"]
                 .as_str()
                 .and_then(|s| s.parse().ok())
@@ -101,19 +98,70 @@ pub fn relate(rows: &[Row], window_seconds: u64) -> Result<Vec<Value>> {
             else {
                 continue;
             };
-            if bindings.len() >= 10000 {
-                return Err(error(
-                    "DNS answer budget exceeded; narrow the selected time interval",
-                ));
+            for question in dns["questions"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter(|q| q["class"] == 1)
+            {
+                let Some(root) = question["name"].as_str().map(name) else {
+                    continue;
+                };
+                let mut chain = vec![root.clone()];
+                let mut current = root.clone();
+                let mut effective_ttl = ttl;
+                for _ in 0..16 {
+                    if current == owner {
+                        break;
+                    }
+                    let links: Vec<_> = dns["answers"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter(|r| {
+                            r["class"] == 1
+                                && r["rr_type"] == 5
+                                && r["name"].as_str().is_some_and(|n| name(n) == current)
+                        })
+                        .collect();
+                    if links.len() != 1 {
+                        break;
+                    }
+                    let link = links[0];
+                    let Some(next) = link["data"]["value"].as_str().map(name) else {
+                        break;
+                    };
+                    let Some(link_ttl) = link["ttl"]
+                        .as_u64()
+                        .filter(|t| *t > 0 && *t <= u64::from(u32::MAX))
+                    else {
+                        break;
+                    };
+                    if chain.contains(&next) {
+                        break;
+                    }
+                    effective_ttl = effective_ttl.min(link_ttl);
+                    current = next;
+                    chain.push(current.clone());
+                }
+                if current != owner {
+                    continue;
+                }
+                if bindings.len() >= 10000 {
+                    return Err(error(
+                        "DNS answer budget exceeded; narrow the selected time interval",
+                    ));
+                }
+                bindings.push(Binding {
+                    row,
+                    name: root,
+                    address,
+                    at,
+                    ttl: effective_ttl,
+                    context: context.clone(),
+                    chain,
+                });
             }
-            bindings.push(Binding {
-                row,
-                name: owner,
-                address,
-                at,
-                ttl,
-                context: context.clone(),
-            });
         }
     }
     let mut output = Vec::new();
@@ -138,7 +186,7 @@ pub fn relate(rows: &[Row], window_seconds: u64) -> Result<Vec<Value>> {
                 if dns.name == *sni
                     && dns.address == address
                     && dns.row.sensor == tls.sensor
-                    && dns.row.source == tls.source
+                    && (cross_source || dns.row.source == tls.source)
                     && dns.context == *network
                     && dns.row.dst_ip.as_ref() == Some(client)
                     && tls.identity_status == "instance"
@@ -157,7 +205,7 @@ pub fn relate(rows: &[Row], window_seconds: u64) -> Result<Vec<Value>> {
         if candidates.is_empty() {
             output.push(json!({"event_type":"correlation.dns_tls", "status":"unmatched", "tls_event_id":tls.event_id,
                 "tls_flow_id":tls.flow_id,"server_name":sni,"reason":"no direct DNS answer satisfying source, sensor, client, link context, destination IP, SNI, TTL and time window",
-                "limits":"missing timestamps/SNI/instance identity, ECH, CNAME-only answers and other capture sources are not inferred"}));
+                "limits":"missing timestamps/SNI/instance identity, ECH and incomplete/cyclic DNS chains are not inferred; cross-source clock alignment is never guaranteed"}));
         } else {
             for (dns, delta) in &candidates {
                 let related_intel: Vec<_> = intel
@@ -169,9 +217,9 @@ pub fn relate(rows: &[Row], window_seconds: u64) -> Result<Vec<Value>> {
                     .collect();
                 output.push(json!({"event_type":"correlation.dns_tls", "status":if candidates.len()>1 {"ambiguous"} else {"inferred"},
                     "candidate_count":candidates.len(),"dns_event_id":dns.row.event_id,"dns_flow_id":dns.row.flow_id,"tls_event_id":tls.event_id,"tls_flow_id":tls.flow_id,
-                    "sensor":tls.sensor,"source":tls.source,"client":tls.src_ip,"server_name":sni,"destination_ip":tls.dst_ip,
+                    "sensor":tls.sensor,"source":tls.source,"dns_source":dns.row.source,"cross_source":dns.row.source!=tls.source,"dns_name_chain":dns.chain,"client":tls.src_ip,"server_name":sni,"destination_ip":tls.dst_ip,
                     "delta_ns":delta.to_string(),"dns_ttl_seconds":dns.ttl,"window_seconds":window_seconds,"intel_event_ids":related_intel,
-                    "basis":["same sensor/source/link context","DNS response delivered to TLS client","direct A/AAAA answer matches TLS destination","answer owner matches visible SNI","DNS precedes TLS within TTL and window"],
+                    "basis":["same sensor/link context; source equality unless explicitly relaxed","DNS response delivered to TLS client","A/AAAA answer matches TLS destination through a bounded CNAME chain","queried name matches visible SNI","DNS precedes TLS within TTL and window"],
                     "uncertainty":"observational association, not proof that this DNS answer caused the connection; capture-clock accuracy is not established"}));
             }
         }
@@ -261,5 +309,42 @@ mod tests {
         rows[1].timestamp_ns = Some("3000000001".into());
         assert_eq!(relate(&rows, 2).unwrap()[0]["status"], "unmatched");
         assert!(relate(&vec![Row::default(); 10000], 300).is_err());
+    }
+}
+
+#[cfg(test)]
+mod extended_tests {
+    use super::*;
+    #[test]
+    fn cname_ttl_and_cross_capture_opt_in() {
+        let packet = json!({"header":{"section":0,"interface":0},"vlans":[]});
+        let dns=Row{event_id:"dns".into(),flow_id:"dns-flow".into(),identity_status:"instance".into(),sensor:"lab".into(),source:"one".into(),timestamp_ns:Some("1000000000".into()),event_type:"dns.response".into(),dst_ip:Some("192.0.2.1".into()),payload:json!({"packet":packet,"dns":{"rcode":0,"truncated":false,"response":true,"questions":[{"name":"example.test","class":1}],"answers":[{"name":"example.test","rr_type":5,"class":1,"ttl":3,"data":{"type":"name","value":"edge.test"}},{"name":"edge.test","rr_type":1,"class":1,"ttl":60,"data":{"type":"a","value":"198.51.100.20"}}]}}).to_string(),..Default::default()};
+        let tls = Row {
+            event_id: "tls".into(),
+            flow_id: "tls-flow".into(),
+            identity_status: "instance".into(),
+            sensor: "lab".into(),
+            source: "two".into(),
+            timestamp_ns: Some("2000000000".into()),
+            event_type: "tls.client_hello".into(),
+            src_ip: Some("192.0.2.1".into()),
+            dst_ip: Some("198.51.100.20".into()),
+            payload: json!({"packet":packet,"protocol":{"server_name":"example.test"}}).to_string(),
+            ..Default::default()
+        };
+        let mut rows = vec![dns, tls];
+        assert_eq!(relate(&rows, 300).unwrap()[0]["status"], "unmatched");
+        let results = relate_sources(&rows, 300, true).unwrap();
+        assert_eq!(results[0]["status"], "inferred");
+        assert_eq!(results[0]["dns_ttl_seconds"], 3);
+        assert_eq!(
+            results[0]["dns_name_chain"],
+            json!(["example.test", "edge.test"])
+        );
+        rows[1].timestamp_ns = Some("4000000000".into());
+        assert_eq!(
+            relate_sources(&rows, 300, true).unwrap()[0]["status"],
+            "unmatched"
+        );
     }
 }

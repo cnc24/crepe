@@ -261,7 +261,25 @@ fn tls(bytes: &[u8]) -> Result<Inspection> {
     }
     Ok(Inspection::More)
 }
+#[derive(Debug, Clone, Copy)]
+pub struct Enabled {
+    pub tls: bool,
+    pub http: bool,
+    pub ssh: bool,
+}
+impl Default for Enabled {
+    fn default() -> Self {
+        Self {
+            tls: true,
+            http: true,
+            ssh: true,
+        }
+    }
+}
 pub fn inspect(bytes: &[u8]) -> Result<Inspection> {
+    inspect_enabled(bytes, Enabled::default())
+}
+pub fn inspect_enabled(bytes: &[u8], enabled: Enabled) -> Result<Inspection> {
     if bytes.len() > 65536 {
         return Err(error("CREPE-L7-001", "protocol header limit"));
     }
@@ -269,9 +287,15 @@ pub fn inspect(bytes: &[u8]) -> Result<Inspection> {
         return Ok(Inspection::More);
     }
     if bytes[0] == 22 {
+        if !enabled.tls {
+            return Ok(Inspection::Ignore);
+        }
         return tls(bytes);
     }
     if bytes.starts_with(b"SSH-") || bytes.windows(5).any(|p| p == b"\nSSH-") {
+        if !enabled.ssh {
+            return Ok(Inspection::Ignore);
+        }
         for line in bytes.split_inclusive(|b| *b == b'\n') {
             if line.starts_with(b"SSH-") {
                 if !line.ends_with(b"\n") {
@@ -311,6 +335,9 @@ pub fn inspect(bytes: &[u8]) -> Result<Inspection> {
         .iter()
         .any(|p| bytes.starts_with(p));
     if http {
+        if !enabled.http {
+            return Ok(Inspection::Ignore);
+        }
         let mut headers = [httparse::EMPTY_HEADER; 64];
         if bytes.starts_with(b"HTTP/") {
             let mut response = httparse::Response::new(&mut headers);

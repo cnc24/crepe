@@ -134,6 +134,18 @@ if __name__ == '__main__':
                 pieces.append(eth+header+s.pack('!BBHI',17,0,offset|int(more),42)+part)
         fragments += list(reversed(pieces))
     files['fragments.pcap'] = pcap(packets=fragments)
+    # TLS spans reordered/retransmitted TCP segments; the gap-filling segment is fragmented.
+    cut = len(tls)//2
+    head = frame(4,6,50443,443,sequence=1001,flags=24,payload=tls[:cut])
+    eth, ip = head[:14], head[14:]
+    pieces = []
+    transport = ip[20:]
+    for offset, part, more in [(0,transport[:24],True),(24,transport[24:],False)]:
+        header=bytearray(ip[:20]);header[2:4]=s.pack('!H',20+len(part));header[4:6]=s.pack('!H',77);header[6:8]=s.pack('!H',offset//8 | (0x2000 if more else 0));header[10:12]=b'\0\0';header[10:12]=s.pack('!H',checksum(bytes(header)))
+        pieces.append(eth+header+part)
+    tail=frame(4,6,50443,443,sequence=1001+cut,flags=24,payload=tls[cut:])
+    files['target-reassembly.pcap']=pcap(packets=story[:2]+[frame(4,6,50443,443,sequence=1000),tail,tail]+list(reversed(pieces)))
+
     # Packet display and application filters: HTTP on a nonstandard port, ARP and VLAN LLDP.
     eth = bytes.fromhex('ffffffffffff020000000001')
     arp = s.pack('!HHBBH',1,0x0800,6,4,1) + bytes.fromhex('020000000001') + bytes([192,0,2,10]) + bytes(6) + bytes([192,0,2,1])

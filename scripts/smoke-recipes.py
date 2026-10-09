@@ -138,6 +138,31 @@ with tempfile.TemporaryDirectory(prefix='crepe-recipe-smoke-') as directory:
     print('PASS: crepe banane udp:// listener -> actual NetFlow v5 datagram.')
 
 
+    policy = directory / 'collector.cpl'
+    policy.write_text('on flow.export where dst.port == 443 { tag("encrypted-port"); metric(name: "exported_tls_flows", value: 1); }')
+    collector_config = directory / 'collector.toml'
+    collector_config.write_text('policy_rules = ' + json.dumps(str(policy)) + '\n')
+    proc = subprocess.Popen([binary, 'run', '--profile', 'banane', '--listen', '127.0.0.1:0',
+                             '--duration', '2', '--enable', 'policy', '--config', str(collector_config),
+                             '--store', str(directory / 'collector-policy')],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        line = ready(proc, 'Collector listening')
+        port = int(line.strip().rsplit(':', 1)[1])
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+            client.sendto(header + record, ('127.0.0.1', port))
+        rows = finish(proc)
+        assert any(row.get('event_type') == 'policy.tag' for row in rows), rows
+        assert any(row.get('event_type') == 'policy.metric' for row in rows), rows
+        stored = subprocess.check_output([binary, 'query', str(directory / 'collector-policy'),
+                                          'event.type == policy.tag'], text=True)
+        assert 'encrypted-port' in stored, stored
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.communicate()
+    print('PASS: collector-only recipe executes CPL and retains linked effects.')
+
     proc = subprocess.Popen([binary, 'complete', '-i', interface, '--workers', '4', '--listen', '127.0.0.1:0',
                              '--duration', '2', '--store', str(directory / 'combined')],
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

@@ -2,6 +2,9 @@
 mod config;
 pub mod correlation;
 mod identity_index;
+pub mod modules;
+mod notices;
+pub mod raw;
 mod workers;
 pub use config::{Config, Profile};
 use crepe_core::{Error, PacketEvent, Result};
@@ -14,6 +17,7 @@ pub struct Summary {
     pub malformed_packets: u64,
     pub observations: u64,
     pub notices: u64,
+    pub suppressed_notices: u64,
     pub incomplete_datagrams: usize,
     pub expired_datagrams: u64,
     pub evicted_datagrams: u64,
@@ -64,6 +68,7 @@ struct Sink<'a, 'b> {
     source: &'a str,
     ordinal: u64,
     identities: identity_index::Index,
+    notice_gate: notices::Gate,
     summary: Summary,
     seen: BTreeMap<String, String>,
     seen_bytes: usize,
@@ -102,6 +107,27 @@ impl Sink<'_, '_> {
         }
         if let Ok(payload) = serde_json::from_str::<serde_json::Value>(&row.payload) {
             let mut domains = Vec::new();
+            if row.event_type == "http.request" {
+                if let Some(target) = payload.pointer("/protocol/target").and_then(|v| v.as_str()) {
+                    let candidate =
+                        if target.starts_with("http://") || target.starts_with("https://") {
+                            Some(target.to_string())
+                        } else if target.starts_with('/') {
+                            payload
+                                .pointer("/protocol/host")
+                                .and_then(|v| v.as_str())
+                                .map(|host| format!("http://{host}{target}"))
+                        } else {
+                            None
+                        };
+                    if let Some(url) =
+                        candidate.and_then(|s| crepe_security::normalize_url(&s).ok())
+                    {
+                        fields.insert("url".into(), vec![url]);
+                    }
+                }
+            }
+
             if let Some(questions) = payload.pointer("/dns/questions").and_then(|v| v.as_array()) {
                 for question in questions.iter().take(256) {
                     if let Some(name) = question["name"].as_str() {
@@ -125,13 +151,10 @@ impl Sink<'_, '_> {
             }
         }
         let findings = self.security.inspect(&row.event_type, &fields);
-        let parent = identity(&[
-            &self.config.sensor,
-            self.source,
-            &(self.ordinal + 1).to_string(),
-        ]);
+        let Some(parent) = self.publish_observation(row.clone())? else {
+            return Ok(());
+        };
         row.event_id = parent.clone();
-        self.push_raw(row.clone())?;
         for finding in findings {
             if !self.config.accepts(finding.event_type) {
                 continue;
@@ -143,7 +166,7 @@ impl Sink<'_, '_> {
             notice.payload =
                 json(&serde_json::json!({"source_event_id":parent,"finding":finding}))?;
             self.summary.notices += 1;
-            self.push_raw(notice)?;
+            self.publish_observation(notice)?;
         }
         #[cfg(feature = "plugins")]
         if row.event_type != "packet" && !self.plugins.is_empty() {
@@ -165,12 +188,55 @@ impl Sink<'_, '_> {
                 observation.bytes = None;
                 observation.payload = json(&payload)?;
                 self.summary.notices += 1;
-                self.push_raw(observation)?;
+                self.publish_observation(observation)?;
             }
         }
         Ok(())
     }
-    fn push_raw(&mut self, mut row: Row) -> Result<()> {
+    fn publish_observation(&mut self, mut row: Row) -> Result<Option<String>> {
+        if !self.notice_gate.allow(&row) {
+            return Ok(None);
+        }
+        let parent = identity(&[
+            &self.config.sensor,
+            self.source,
+            &(self.ordinal + 1).to_string(),
+        ]);
+        row.event_id = parent.clone();
+        let effects = if self.config.active("policy") {
+            self.security
+                .cpl
+                .as_mut()
+                .map(|program| {
+                    program.evaluate(&serde_json::to_value(&row).expect("serializable row"))
+                })
+                .transpose()?
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        self.persist(row.clone())?;
+        for effect in effects {
+            if !self.config.accepts(effect.event_type) {
+                continue;
+            }
+            let mut observation = row.clone();
+            observation.event_type = effect.event_type.into();
+            observation.packets = None;
+            observation.bytes = None;
+            observation.payload =
+                json(&serde_json::json!({"source_event_id":parent,"effect":effect}))?;
+            self.push_raw(observation)?;
+        }
+        Ok(Some(parent))
+    }
+    fn push_raw(&mut self, row: Row) -> Result<()> {
+        if !self.notice_gate.allow(&row) {
+            return Ok(());
+        }
+        self.persist(row)
+    }
+    fn persist(&mut self, mut row: Row) -> Result<()> {
         self.ordinal += 1;
         row.event_id = identity(&[&self.config.sensor, self.source, &self.ordinal.to_string()]);
         self.summary.observations += 1;
@@ -182,6 +248,15 @@ impl Sink<'_, '_> {
             self.checkpoint_rows += 1;
         }
         self.maybe_checkpoint()
+    }
+    fn finish_policies(&mut self) -> Result<()> {
+        let suppressed =
+            self.notice_gate.suppressed + self.security.cpl.as_ref().map_or(0, |p| p.suppressed);
+        self.summary.suppressed_notices = suppressed;
+        if suppressed > 0 {
+            self.push_raw(Row{sensor:self.config.sensor.clone(),source:self.source.into(),event_type:"policy.summary".into(),payload:json(&serde_json::json!({"suppressed_notices":suppressed,"rate_limit_per_second":100,"dedup_seconds":60}))?,..Default::default()})?;
+        }
+        Ok(())
     }
     fn maybe_checkpoint(&mut self) -> Result<()> {
         if self.checkpoint
@@ -253,6 +328,9 @@ impl Sink<'_, '_> {
         }
         let mut row = packet_row(self.config, self.source, &event.packet, kind, json(&event)?);
         self.identities.apply(&event.packet, &mut row);
+        if row.flow_id.is_empty() {
+            self.identities.apply_evidence(&event.evidence, &mut row);
+        }
         self.push(row.clone())?;
         // A small observational policy: keep the first DNS answer per name and report changes.
         if self.config.notices {
@@ -363,7 +441,7 @@ pub fn ingest_with_progress(
     mut progress: impl FnMut(u64),
 ) -> Result<Summary> {
     config.validate()?;
-    if matches!(config.profile, Profile::Banane) {
+    if !config.packets() {
         return Err(Error::new("CREPE-CONFIG-001", "Banane collects NetFlow/IPFIX over UDP; use crepe banane --listen IP:PORT instead of importing a PCAP."));
     }
     let source = crepe_storage::hash_file(file)?;
@@ -383,6 +461,9 @@ pub fn ingest_with_progress(
             "CREPE-ENGINE-001",
             "input changed during import; batch discarded",
         ));
+    }
+    if config.raw.enabled {
+        raw::retain_file(store, &source, file, &config.raw)?;
     }
     writer.commit()?;
     Ok(summary)
@@ -439,10 +520,10 @@ pub fn stream_inputs(
     observe: &mut dyn FnMut(&Row) -> Result<()>,
 ) -> Result<Summary> {
     config.validate()?;
-    if matches!(config.profile, Profile::Banane) {
+    if !config.packets() && !config.active("collector") {
         return Err(Error::new(
             "CREPE-CONFIG-001",
-            "Banane requires the UDP collector.",
+            "Streaming requires a packet or collector module.",
         ));
     }
     let batch = identity(&[source, &config.sensor]);
@@ -450,7 +531,30 @@ pub fn stream_inputs(
     if let Some(writer) = &mut writer {
         writer.enable_hot_queries()?;
     }
-    let summary = process_records(config, source, writer.as_mut(), Some(observe), read)?;
+    let mut raw_capture = if config.raw.enabled {
+        Some(raw::Capture::new(
+            store.ok_or_else(|| Error::new("CREPE-RAW-001", "raw retention requires --store"))?,
+            source,
+            &config.raw,
+        )?)
+    } else {
+        None
+    };
+    let summary = process_records(config, source, writer.as_mut(), Some(observe), |emit| {
+        read(&mut |input| {
+            if let Some(raw) = &mut raw_capture {
+                match &input {
+                    Input::Packet(record) => raw.push(record)?,
+                    Input::Tick(_) => raw.tick()?,
+                    _ => {}
+                }
+            }
+            emit(input)
+        })
+    })?;
+    if let Some(raw) = &mut raw_capture {
+        raw.rotate()?;
+    }
     if let Some(writer) = writer {
         writer.commit()?;
     }
@@ -464,6 +568,8 @@ fn process_records(
     observe: Observer<'_>,
     read: impl FnOnce(&mut dyn FnMut(Input<'_>) -> Result<bool>) -> Result<()>,
 ) -> Result<Summary> {
+    let prepared = config.prepared()?;
+    let config = &prepared;
     #[cfg(not(feature = "plugins"))]
     if !config.plugins.is_empty() {
         return Err(Error::new(
@@ -479,6 +585,7 @@ fn process_records(
         source,
         ordinal: 0,
         identities: identity_index::Index::default(),
+        notice_gate: notices::Gate::default(),
         summary: Summary::default(),
         seen: BTreeMap::new(),
         seen_bytes: 0,
@@ -496,10 +603,18 @@ fn process_records(
     };
     if checkpoint && config.workers > 1 {
         workers::run(config, read, &mut sink)?;
+        sink.finish_policies()?;
         return Ok(sink.summary);
     }
     let mut analyzer = crepe_analysis::Processor::new(crepe_analysis::Config {
         dns_ports: vec![config.dns_port],
+        dns: config.active("dns"),
+        files: config.active("files"),
+        protocols: crepe_analysis::ProtocolModules {
+            tls: config.active("tls"),
+            http: config.active("http"),
+            ssh: config.active("ssh"),
+        },
         max_streams: config.max_streams,
         max_buffer_bytes: config.max_buffer_bytes,
         ..Default::default()
@@ -538,17 +653,20 @@ fn process_records(
             }
         };
         sink.summary.packets += 1;
-        let decoded = match record.decode() {
-            Ok(decoded) => decoded,
-            Err(error) if config.tolerant_decode && error.code == "CREPE-PKT-001" => {
-                sink.malformed(&record.header, &error)?;
-                return Ok(true);
-            }
-            Err(error) => return Err(error),
-        };
-        if let Some(p) = decoded {
+        let decoded =
+            match crepe_packet::decode_view(record.data, record.header.clone(), record.linktype) {
+                Ok(decoded) => decoded,
+                Err(error) if config.tolerant_decode && error.code == "CREPE-PKT-001" => {
+                    sink.malformed(&record.header, &error)?;
+                    return Ok(true);
+                }
+                Err(error) => return Err(error),
+            };
+        if let Some(view) = decoded {
+            let sequence = view.tcp_sequence;
+            let p = view.event;
             let anchor = if config.flows() && p.header.timestamp_ns.is_some() {
-                flows.push(&p, |f| sink.flow(f))?;
+                flows.push_with_sequence(&p, sequence, |f| sink.flow(f))?;
                 flows.last_assignment()
             } else {
                 None
@@ -578,6 +696,7 @@ fn process_records(
         sink.summary.expired_datagrams = analyzer.fragments.stats.expired;
         sink.summary.evicted_datagrams = analyzer.fragments.stats.evicted;
     }
+    sink.finish_policies()?;
     let summary = sink.summary;
     Ok(summary)
 }
@@ -594,8 +713,18 @@ fn load_security(config: &Config) -> Result<crepe_security::Engine> {
         Ok(text)
     }
     crepe_security::Engine::new(
-        &read(config.intel_feed.as_deref())?,
-        &read(config.policy_rules.as_deref())?,
+        &read(
+            config
+                .intel_feed
+                .as_deref()
+                .filter(|_| config.active("intel")),
+        )?,
+        &read(
+            config
+                .policy_rules
+                .as_deref()
+                .filter(|_| config.active("policy")),
+        )?,
     )
 }
 
@@ -675,6 +804,7 @@ mod tests {
             source: "test",
             ordinal: 0,
             identities: identity_index::Index::default(),
+            notice_gate: notices::Gate::default(),
             summary: Summary::default(),
             seen: BTreeMap::new(),
             seen_bytes: 0,

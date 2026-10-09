@@ -16,8 +16,13 @@ pub enum Profile {
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub schema_version: u16,
+    pub raw: crate::raw::Policy,
     pub sensor: String,
     pub profile: Profile,
+    pub profiles: Vec<Profile>,
+    pub enabled_modules: Vec<String>,
+    #[serde(skip)]
+    pub resolved_modules: Option<std::collections::BTreeSet<String>>,
     pub max_streams: usize,
     pub workers: usize,
     pub max_buffer_bytes: usize,
@@ -37,8 +42,12 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             schema_version: 1,
+            raw: Default::default(),
             sensor: "local".into(),
             profile: Profile::Complete,
+            profiles: Vec::new(),
+            enabled_modules: Vec::new(),
+            resolved_modules: None,
             max_streams: 1024,
             workers: 1,
             max_buffer_bytes: 4194304,
@@ -90,6 +99,8 @@ impl Config {
         Ok(result)
     }
     pub fn validate(&self) -> Result<()> {
+        self.raw.validate()?;
+        crate::modules::resolve(self)?;
         if self.schema_version != 1
             || self.sensor.is_empty()
             || self.sensor.len() > 64
@@ -110,10 +121,6 @@ impl Config {
                 .interface
                 .as_ref()
                 .is_some_and(|s| s.is_empty() || s.len() > 256 || s.contains('\0'))
-            || self
-                .disabled_modules
-                .iter()
-                .any(|s| !["dns", "tls", "http", "ssh", "files", "notices"].contains(&s.as_str()))
         {
             return Err(Error::new(
                 "CREPE-CONFIG-001",
@@ -122,41 +129,44 @@ impl Config {
         }
         Ok(())
     }
+    pub fn prepared(&self) -> Result<Self> {
+        self.validate()?;
+        let mut c = self.clone();
+        c.resolved_modules = Some(crate::modules::resolve(self)?.modules.into_iter().collect());
+        Ok(c)
+    }
+    pub fn active(&self, name: &str) -> bool {
+        match &self.resolved_modules {
+            Some(modules) => modules.contains(name),
+            None => {
+                crate::modules::resolve(self).is_ok_and(|p| p.modules.iter().any(|m| m == name))
+            }
+        }
+    }
     pub fn packets(&self) -> bool {
-        matches!(
-            self.profile,
-            Profile::Sucre
-                | Profile::Chocolate
-                | Profile::Suzette
-                | Profile::Maison
-                | Profile::Complete
-        )
+        self.active("packet")
     }
     pub fn flows(&self) -> bool {
-        matches!(
-            self.profile,
-            Profile::Chocolate | Profile::Suzette | Profile::Maison | Profile::Complete
-        )
+        self.active("flow")
     }
     pub fn analysis(&self) -> bool {
-        matches!(
-            self.profile,
-            Profile::Chocolate | Profile::Suzette | Profile::Maison | Profile::Complete
-        )
+        ["dns", "tls", "http", "ssh", "files"]
+            .iter()
+            .any(|m| self.active(m))
     }
     pub fn accepts(&self, kind: &str) -> bool {
-        !matches!(self.profile, Profile::Banane)
-            && (self.notices || !kind.starts_with("notice."))
-            && !self.disabled_modules.iter().any(|m| {
-                kind.starts_with(&format!(
-                    "{}.",
-                    match m.as_str() {
-                        "files" => "file",
-                        "notices" => "notice",
-                        _ => m,
-                    }
-                ))
-            })
+        let module = match kind.split('.').next().unwrap_or(kind) {
+            "file" => "files",
+            "notice" => "notices",
+            "dns" => "dns",
+            "tls" => "tls",
+            "http" => "http",
+            "ssh" => "ssh",
+            "intel" => "intel",
+            "policy" => "policy",
+            _ => return true,
+        };
+        self.active(module)
     }
 }
 #[cfg(test)]

@@ -1,0 +1,14 @@
+sensor = "lab"
+profiles = ["chocolate", "banane"]
+policy_rules = "config/target.cpl"
+intel_feed = "config/intel-example.jsonl"
+max_streams = 1024
+max_buffer_bytes = 4194304
+workers = 1
+
+# Explicit opt-in: only Crepe-owned copies are rotated/deleted.
+[raw]
+enabled = true
+max_bytes = 268435456
+rotate_bytes = 16777216
+max_age_seconds = 86400

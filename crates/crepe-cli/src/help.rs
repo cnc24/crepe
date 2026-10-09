@@ -29,6 +29,8 @@ pub fn configure(mut command: Command) -> Command {
         .collect();
     for name in names {
         let extra = match name.as_str() {
+            "plan" => "Examples:\n  crepe plan --profile chocolate --profile banane\n  crepe plan --profile sucre --enable tls\n  crepe plan --config sensor.toml --disable http --disable files\n\nResolves built-in manifests, dependencies, budgets and lifecycle before any capture.\nA disabled required dependency is an error. Repeat --profile to combine recipes.",
+            "raw-prune" => "Examples:\n  crepe raw-prune ./case --max-age-seconds 86400 --max-bytes 268435456\n\nTakes the store writer lock and removes expired/oldest manifest-owned raw copies.\nNever deletes original input files or historical rows. Stop writers first.\nRaw retention is opt-in with --keep-raw or [raw] enabled = true in configuration.",
             "correlate" => r#"Examples:
   crepe forensics incident.pcap --store ./case
   crepe correlate ./case --window 300
@@ -37,11 +39,12 @@ pub fn configure(mut command: Command) -> Command {
 Schema-2 stores only. Reads fewer than 10,000 DNS/TLS/Intel observations (16 MiB
 maximum); narrow the time interval if needed. Time bounds apply to BOTH DNS and
 TLS observations, so include preceding DNS answers. Results are JSON Lines.
-Direct A/AAAA answers must match visible SNI, TLS destination, client, sensor,
+Direct or CNAME-linked A/AAAA answers must match visible SNI, TLS destination, client, sensor,
 source and link context, within DNS TTL and --window seconds. Repeated candidates
 are marked ambiguous; missing evidence produces unmatched results. These are
-inferred relationships, not proof of causality. No cross-capture, CNAME-chain or
-encrypted-name guesses. Use evidence STORE EVENT_ID --capture FILE for a packet."#,
+inferred relationships, not proof of causality. --cross-source allows same-sensor
+capture sources; clock alignment remains unverified. Hidden names are not guessed.
+Use timeline STORE --related EVENT_ID to view the linked observations together."#,
             "evidence" => r#"Examples:
   crepe query ./case 'event.type == intel.match | select event.id'
   crepe evidence ./case EVENT_ID
@@ -49,8 +52,10 @@ encrypted-name guesses. Use evidence STORE EVENT_ID --capture FILE for a packet.
   crepe evidence ./case EVENT_ID --capture incident.pcap --write evidence.pcap
 
 EVENT_ID is the 64-character event_id, not flow_id. Follows notice/Intel parent
-references to one triggering packet, or a flow's first observed packet. This
-is not a complete stream export. Without --capture, availability is not checked.
+references to recorded reassembly inputs, or a legacy/flow anchor. Without
+--capture, retained raw files are located automatically. provenance_complete
+reports whether all observed analysis inputs are referenced (up to 4096).
+This does not prove that unobserved network traffic never existed.
 The original capture's content hash must match the stored source. Missing files
 are reported explicitly; unrelated files are refused. --write never overwrites.
 Live sources without a matching retained capture and legacy flow records may
@@ -77,7 +82,7 @@ Examples:
 
 inspect/chocolate and full/complete currently use the same analysis engines.
 forensics/suzette retains ./crepe-cases/case-*/history by default; other file
-recipes need --store to keep their observations. The source capture is not copied.
+recipes need --store to keep their observations. The source capture is copied only with --keep-raw or raw.enabled.
 Recipe file input is fully processed before JSON Lines are printed (up to 10,000
 observations); retained stores keep all observations for later queries.
 Without a source, recipe commands offer a terminal source menu unless configuration
@@ -132,7 +137,7 @@ endpoints, not necessarily the initiator/responder. Use trace for a conversation
 Imports observations into an atomic Parquet batch; stdout is a JSON import
 summary, not packet output. A successful import is available to query/timeline/trace.
 An identical batch cannot be imported twice. Use read for immediate packet output
-or flows --store for flow-only history. The source capture is not copied."#
+or flows --store for flow-only history. The source capture is copied only with --keep-raw or raw.enabled."#
             }
             "trace" => {
                 r#"Examples:
@@ -153,7 +158,8 @@ crepe forensics traffic.pcap --store ./case."#
 
 Reads an existing store and prints observations in chronological order as JSON
 Lines. Create a case with crepe forensics traffic.pcap --store ./case first.
-Use query for filtering and trace to follow one conversation."#
+Use --related EVENT_ID for a common DNS/TLS/Intel/policy timeline with explicit
+truncation; otherwise use query for filtering and trace for one flow instance."#
             }
             "compact" => {
                 r#"Examples:
@@ -178,7 +184,7 @@ a case automatically. Use read for packet summaries and byte dumps."#
             "inspect" | "full" | "run" => {
                 r#"Examples:
   crepe inspect traffic.pcap --store ./history
-  crepe full traffic.pcap --disable http
+  crepe full traffic.pcap --disable http --disable files
   crepe run traffic.pcap --config crepe.toml
   crepe query ./history 'event.type == dns.query'
 
@@ -187,8 +193,9 @@ observations). Use --store to retain all observations for later queries; otherwi
 file history is temporary unless configured. Live input streams observations.
 Omit the source for a terminal menu unless configuration selects an interface.
 inspect/chocolate and full/complete currently share the same analysis engines.
-run/maison uses the configured profile (default: complete). Module switches alter
-observations, not the source traffic. TLS is not decrypted.
+run/maison uses the configured profile (default: complete). Repeat --profile to
+combine recipes. Use plan to inspect dependencies. --disable http also requires
+--disable files, because file hashing depends on HTTP. --keep-raw requires --store. TLS is not decrypted.
 Use profiles -h for workflow differences and forensics for an automatic case."#
             }
             "forensics" => {
@@ -199,7 +206,7 @@ Use profiles -h for workflow differences and forensics for an automatic case."#
   crepe trace ./case FLOW_ID
 
 Alias: suzette. Retains a case by default in ./crepe-cases/case-*/history.
---store chooses its location. The source capture is not copied.
+--store chooses its location. The source capture is copied only with --keep-raw or raw.enabled.
 File input is fully processed before JSON Lines output (up to 10,000 observations);
 query the retained store for more results. Use profiles -h to compare workflows."#
             }

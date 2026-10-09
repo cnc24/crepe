@@ -16,7 +16,6 @@ mod packet_filter;
 mod recipes;
 mod reporting;
 mod update;
-#[cfg(feature = "live")]
 mod windows;
 use args::{Cli, Format};
 use clap::{CommandFactory, FromArgMatches};
@@ -52,8 +51,13 @@ fn main() -> ExitCode {
     } else {
         template
     };
+    let mut command = command.help_template(template);
+    if std::env::args_os().len() == 1 {
+        let _ = command.print_help();
+        println!();
+        return ExitCode::SUCCESS;
+    }
     let cli = match command
-        .help_template(template)
         .try_get_matches()
         .and_then(|matches| Cli::from_arg_matches(&matches))
     {

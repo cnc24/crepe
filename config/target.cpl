@@ -1,0 +1,11 @@
+rule suspicious-dns version "1" on dns.query
+where dns.qname == "example.test." {
+    notice(severity: high, message: "Synthetic lab domain observed");
+    tag("lab-domain");
+    metric(name: "lab_dns_queries", value: 1);
+    log(level: info, message: "DNS policy matched");
+}
+rule intel-context version "1" on intel.match
+where proto == tcp {
+    tag(name: "investigation", value: "review-intel-source");
+}

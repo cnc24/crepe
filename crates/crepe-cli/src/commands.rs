@@ -119,12 +119,38 @@ fn packets(
 }
 pub(crate) fn run(cli: Cli) -> Result<()> {
     match cli.command {
+        Command::Plan(args) => {
+            let mut config = crate::history::config(args.config.as_deref())?;
+            if !args.profiles.is_empty() {
+                config.profiles = args.profiles.into_iter().map(Into::into).collect();
+            }
+            config.enabled_modules.extend(args.enable);
+            config.disabled_modules.extend(args.disable);
+            crate::history::print_json(&crepe_engine::modules::resolve(&config)?)
+        }
+        Command::RawPrune {
+            store,
+            max_age_seconds,
+            max_bytes,
+        } => {
+            let policy = crepe_engine::raw::Policy {
+                enabled: true,
+                max_age_seconds,
+                max_bytes,
+                rotate_bytes: 1024,
+            };
+            let removed = crepe_storage::exclusive(&store, || {
+                crepe_engine::raw::prune_locked(&store, &policy)
+            })?;
+            crate::history::print_json(&serde_json::json!({"removed_raw_entries":removed}))
+        }
         Command::Correlate {
+            cross_source,
             store,
             window,
             since_ms,
             until_ms,
-        } => crate::investigation::correlate(&store, window, since_ms, until_ms),
+        } => crate::investigation::correlate(&store, window, since_ms, until_ms, cross_source),
         Command::Evidence {
             store,
             event_id,
@@ -154,6 +180,8 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             crate::recipes::run(
                 crepe_engine::Profile::Maison,
                 crate::args::RecipeArgs {
+                    profiles: Vec::new(),
+                    keep_raw: false,
                     file: None,
                     interface: settings.interface,
                     duration,
@@ -213,10 +241,16 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
         }
         Command::Query { store, cql } => crate::history::query(&store, &cql),
         Command::Compact {
+            security_since_ms,
             store,
             output,
             since_ms,
-        } => crate::history::print_json(&crepe_storage::compact(&store, &output, since_ms)?),
+        } => crate::history::print_json(&crepe_storage::compact_classes(
+            &store,
+            &output,
+            since_ms,
+            security_since_ms,
+        )?),
         Command::Trace { store, flow_id } => {
             if crepe_storage::schema_version(&store)? == 1 {
                 crate::report!("Legacy schema-1 trace: flow_id groups endpoint tuples, not unique connection instances. Reimport the original capture into a NEW store for instance-level traces.");
@@ -229,7 +263,14 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
             }
             crate::history::query(&store, &format!("flow.id == {flow_id} | sort timestamp"))
         }
-        Command::Timeline { store, limit } => {
+        Command::Timeline {
+            store,
+            limit,
+            related,
+        } => {
+            if let Some(event) = related {
+                return crate::investigation::related_timeline(&store, &event, limit);
+            }
             crate::history::query(&store, &format!("* | sort timestamp | limit {limit}"))
         }
         Command::Collect {

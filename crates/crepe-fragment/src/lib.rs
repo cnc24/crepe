@@ -1,5 +1,5 @@
 //! Bounded IPv4/IPv6 reassembly with conservative rejection of all overlaps.
-use crepe_core::{Error, Result};
+use crepe_core::{Error, PacketRef, Result};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -44,6 +44,7 @@ pub struct Statistics {
     pub rejected: u64,
 }
 struct Datagram {
+    references: Vec<PacketRef>,
     created: i128,
     pieces: BTreeMap<usize, Vec<u8>>,
     prefix: Option<Vec<u8>>,
@@ -70,6 +71,8 @@ pub struct Table {
     bytes: usize,
     watermark: Option<i128>,
     pub stats: Statistics,
+    pub last_references: Vec<PacketRef>,
+    current_reference: Option<PacketRef>,
 }
 fn error(m: &str) -> Error {
     Error::new("CREPE-IP-001", m)
@@ -193,6 +196,8 @@ impl Table {
             bytes: 0,
             watermark: None,
             stats: Statistics::default(),
+            last_references: Vec::new(),
+            current_reference: None,
         })
     }
     pub fn buffered_bytes(&self) -> usize {
@@ -232,8 +237,10 @@ impl Table {
         scope: &Scope,
         now: i128,
     ) -> Result<Option<Cow<'a, [u8]>>> {
+        self.last_references.clear();
         self.expire(now)?;
         let Some(f) = parse(ip, scope)? else {
+            self.last_references.extend(self.current_reference);
             return Ok(Some(Cow::Borrowed(ip)));
         };
         if f.payload.is_empty()
@@ -245,6 +252,7 @@ impl Table {
             return Err(error("invalid fragment payload/offset"));
         }
         if f.ipv6 && f.offset == 0 && !f.more {
+            self.last_references.extend(self.current_reference);
             return Ok(Some(Cow::Owned(assemble(
                 f.prefix, f.payload, f.next, f.previous, true,
             )?)));
@@ -256,6 +264,18 @@ impl Table {
         }
         result.map(|p| p.map(Cow::Owned))
     }
+    pub fn process_referenced<'a>(
+        &mut self,
+        ip: &'a [u8],
+        scope: &Scope,
+        now: i128,
+        reference: PacketRef,
+    ) -> Result<Option<Cow<'a, [u8]>>> {
+        self.current_reference = Some(reference);
+        let result = self.process(ip, scope, now);
+        self.current_reference = None;
+        result
+    }
     fn insert(&mut self, f: &Fragment<'_>, now: i128) -> Result<Option<Vec<u8>>> {
         if !self.entries.contains_key(&f.key) {
             if self.entries.len() == self.limits.datagrams {
@@ -266,6 +286,7 @@ impl Table {
             self.entries.insert(
                 f.key.clone(),
                 Datagram {
+                    references: Vec::new(),
                     created: now,
                     pieces: BTreeMap::new(),
                     prefix: None,
@@ -300,7 +321,9 @@ impl Table {
         {
             return Err(error("overlapping fragments rejected"));
         }
-        let extra = f.payload.len() + if f.offset == 0 { f.prefix.len() } else { 0 };
+        let extra = f.payload.len()
+            + if f.offset == 0 { f.prefix.len() } else { 0 }
+            + std::mem::size_of::<PacketRef>();
         if d.pieces.len() == self.limits.fragments || self.bytes + extra > self.limits.bytes {
             return Err(error("fragment count/memory budget exceeded"));
         }
@@ -310,6 +333,7 @@ impl Table {
         if !f.more {
             d.total = Some(end);
         }
+        d.references.extend(self.current_reference);
         d.pieces.insert(f.offset, f.payload.to_vec());
         d.bytes += extra;
         self.bytes += extra;
@@ -327,6 +351,8 @@ impl Table {
                     payload.extend_from_slice(p);
                 }
                 let packet = assemble(prefix, &payload, d.next, d.previous, d.ipv6)?;
+                self.last_references = d.references.clone();
+                self.last_references.sort_unstable();
                 self.remove(&f.key);
                 self.stats.completed += 1;
                 return Ok(Some(packet));

@@ -42,6 +42,7 @@ pub enum EndReason {
     Capacity,
     TcpFin,
     TcpReset,
+    TcpReuse,
 }
 /// Passive observations, not validation of endpoint TCP state or ACK numbers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -97,6 +98,7 @@ impl Default for Config {
     }
 }
 struct State {
+    initial_syn: [Option<u32>; 2],
     record: FlowRecord,
     start: i128,
     end: i128,
@@ -169,6 +171,14 @@ impl FlowTable {
     pub fn push(
         &mut self,
         p: &PacketEvent,
+        emit: impl FnMut(FlowRecord) -> Result<()>,
+    ) -> Result<()> {
+        self.push_with_sequence(p, None, emit)
+    }
+    pub fn push_with_sequence(
+        &mut self,
+        p: &PacketEvent,
+        tcp_sequence: Option<u32>,
         mut emit: impl FnMut(FlowRecord) -> Result<()>,
     ) -> Result<()> {
         self.last_assignment = None;
@@ -197,6 +207,24 @@ impl FlowTable {
             return Err(error("TCP/UDP flow packet requires ports"));
         }
         let (key, forward) = FlowKey::from_packet(p);
+        let syn = tcp_sequence.filter(|_| p.tcp_flags.is_some_and(|f| f & 0x12 == 2));
+        let direction = usize::from(!forward);
+        if let Some(sequence) = syn {
+            if self
+                .flows
+                .get(&key)
+                .is_some_and(|state| match state.initial_syn[direction] {
+                    Some(old) => old != sequence,
+                    None => matches!(
+                        state.record.tcp_state,
+                        Some(TcpState::Established | TcpState::Midstream | TcpState::HalfClosed)
+                    ),
+                })
+            {
+                emit(self.remove(&key, EndReason::TcpReuse))?;
+            }
+        }
+
         if !self.flows.contains_key(&key) {
             if self.flows.len() == self.config.max_flows {
                 let (_, victim) = self.deadlines.first().unwrap().clone();
@@ -210,12 +238,13 @@ impl FlowTable {
             self.flows.insert(
                 key.clone(),
                 State {
+                    initial_syn: [None, None],
                     start: now,
                     end: now,
                     deadline: now,
                     reason: EndReason::Eof,
                     record: FlowRecord {
-                        schema_version: 3,
+                        schema_version: 4,
                         event_type: EventType::FlowEnd,
                         flow_id: format!("CX-{id:016x}"),
                         first_sequence: p.header.sequence,
@@ -240,6 +269,9 @@ impl FlowTable {
             );
         }
         let state = self.flows.get_mut(&key).unwrap();
+        if let Some(sequence) = syn {
+            state.initial_syn[direction] = Some(sequence);
+        }
         self.last_assignment = Some(state.record.first_sequence);
         self.deadlines.remove(&(state.deadline, key.clone()));
         state.start = state.start.min(now);
@@ -322,5 +354,66 @@ impl FlowTable {
             emit(self.remove(&key, EndReason::Eof))?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod reuse_tests {
+    use super::*;
+    #[test]
+    fn retransmitted_syn_stays_but_new_sequence_starts_an_instance() {
+        let mut p = PacketEvent {
+            header: crepe_core::EventHeader {
+                schema_version: 1,
+                event_type: crepe_core::EventType::Packet,
+                sequence: 1,
+                timestamp_ns: Some("1000000000".into()),
+                captured_len: 54,
+                original_len: 54,
+                section: 0,
+                interface: 0,
+            },
+            src: crepe_core::Endpoint {
+                ip: "192.0.2.1".parse().unwrap(),
+                port: Some(1234),
+            },
+            dst: crepe_core::Endpoint {
+                ip: "198.51.100.1".parse().unwrap(),
+                port: Some(443),
+            },
+            proto: Protocol::Tcp,
+            fragmented: false,
+            vlans: vec![],
+            tcp_flags: Some(2),
+            icmp_type: None,
+            icmp_code: None,
+        };
+        let mut table = FlowTable::new(Default::default()).unwrap();
+        let mut out = Vec::new();
+        table
+            .push_with_sequence(&p, Some(100), |f| {
+                out.push(f);
+                Ok(())
+            })
+            .unwrap();
+        p.header.sequence = 2;
+        table
+            .push_with_sequence(&p, Some(100), |f| {
+                out.push(f);
+                Ok(())
+            })
+            .unwrap();
+        assert!(out.is_empty());
+        assert_eq!(table.last_assignment(), Some(1));
+        p.header.sequence = 3;
+        table
+            .push_with_sequence(&p, Some(900), |f| {
+                out.push(f);
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].end_reason, EndReason::TcpReuse);
+        assert_eq!(table.last_assignment(), Some(3));
     }
 }

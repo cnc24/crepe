@@ -910,7 +910,7 @@ filtered explicitly.
 Repeated imports of the same capture/filter/settings are rejected as duplicate
 batches. Prefer a new store when comparing different filters on the same capture;
 appending overlapping analyses can double-count observations. Interrupted or failed
-imports do not publish a partial batch. The original capture is not copied.
+imports do not publish a partial batch. By default the original capture is not copied; enable `raw.enabled` in configuration to retain a verified copy.
 
 `flows --format json` without a query retains the original flow-record schema.
 Query-mode JSON uses historical rows/projections, identical to `query`; table/CSV
@@ -952,51 +952,138 @@ flow capacity and timeout options, including explicitly supplied default values.
 Use `--group src.ip --sort flows` to sort grouped flow counts, or
 `--sort packets` / `--sort bytes` to rank individual flow records.
 
-## Connection identity and evidence (1.3.0)
+## Connection identity and evidence (1.4.0)
 
-New histories use schema 2. `flow.id` identifies the observed flow instance;
-`conversation.id` groups the endpoint tuple within a sensor/source/link context.
-Two closed connections reusing the same tuple therefore have distinct flow IDs.
-These are passive boundaries, not a claim that every endpoint TCP state is known.
-`identity.status == unassigned` means there was insufficient retained information
-for an instance assignment, for example fragments or expired ancestry mappings.
+Histories use schema 2. `flow.id` identifies an observed connection instance;
+`conversation.id` groups its endpoint tuple within sensor/source/link context.
+Closed connections and a new TCP SYN sequence create distinct instances. Repeated
+SYN retransmissions stay in the same instance. These are passive boundaries, not
+endpoint TCP emulation. `identity.status == unassigned` means the retained inputs
+do not establish one instance.
 
 ```sh
-crepe forensics fixtures/target-story.pcap --store ./case-v2
+crepe forensics fixtures/target-reassembly.pcap --store ./case-v2 --keep-raw
 crepe query ./case-v2 'event.type == tls.client_hello | select event.id,flow.id,conversation.id'
 crepe correlate ./case-v2 --window 300
+crepe timeline ./case-v2 --related EVENT_ID
 crepe trace ./case-v2 FLOW_ID
-crepe evidence ./case-v2 EVENT_ID --capture fixtures/target-story.pcap
-crepe evidence ./case-v2 EVENT_ID --capture fixtures/target-story.pcap --write evidence.pcap
+crepe evidence ./case-v2 EVENT_ID
+crepe evidence ./case-v2 EVENT_ID --write evidence.pcap
+# Explicit original, when automatic retention was not enabled:
+crepe evidence ./case-v2 EVENT_ID --capture fixtures/target-reassembly.pcap
 ```
 
-Replace IDs with the 64-character values printed by queries/correlation. The
-included fixture has one DNS answer and two TLS connections reusing endpoints.
-To include Intel findings, configure `intel_feed` (see Security above).
+Replace IDs with values returned by the query. Analysis events retain the packet
+references used by their directional reconstruction state, including fragments,
+reordered segments and retransmissions. File events also include relevant request
+context. Evidence follows Intel/policy/notice parents, verifies capture hashes and
+exports the retained packet set to a new PCAP without overwriting an existing file.
+The set can include extra context; it is not byte-minimal. A 4096-reference bound
+and memory limits apply. `provenance_complete: false` exposes overflow, anomaly
+anchors or legacy evidence. This does not assert that unseen packets never existed.
+Mixed link types cannot be exported to a single PCAP.
 
-Correlation checks direct A/AAAA DNS answers against visible TLS SNI, destination
-IP, client, sensor, capture source and link context. DNS must precede TLS inside
-both the answer's TTL and the configured time window. Output labels a unique
-candidate `inferred`, several candidates `ambiguous`, and no supported match
-`unmatched`; it never asserts causality. It includes source event/flow IDs and
-related Intel event IDs. CNAME chains, different sources, unknown capture-clock
-accuracy and hidden SNI/ECH are not guessed. At most 9,999 selected observations,
-16 MiB and 10,000 results are accepted; a limit is an error, not silent truncation.
-Time bounds select both DNS and TLS rows: include earlier DNS answers when choosing
-`--since-ms`. This is an on-demand historical investigation, not a streaming
-correlation rule or a persisted new event batch.
+With `--keep-raw` (recipes) or `[raw] enabled = true` (ingest/recipes config), Crepe
+copies imported originals unchanged and rotates live packet chunks automatically.
+Defaults: 256 MiB total, 16 MiB per chunk, 24 hours. Configure `max_bytes`,
+`rotate_bytes`, `max_age_seconds` under `[raw]`; see `config/target.toml`.
+Live rotation also occurs after 4096 records, source-context changes and periodic
+ticks. A manifest maps original record references to verified files. Only
+Crepe-owned copies are deleted. Metadata and user originals are independent.
+A stopped process does not run a retention timer:
 
-Evidence follows Intel/notice source-event references to a referenced packet or
-a flow's first record. Without `--capture` it reports `not_checked`. With the
-original file it verifies the content hash and exact record/section/interface.
-A missing original is `missing`; an unrelated hash is an error. Export uses a
-new file and publishes only after successful writing. One referenced packet is
-not the full set of segments used for reassembly. Live session identities and
-exporter telemetry may have no retrievable capture. Metadata survives independently
-and must not be presented as raw evidence.
+```sh
+crepe raw-prune ./case-v2 --max-age-seconds 86400 --max-bytes 268435456
+```
 
-Schema-1 stores remain queryable with their old tuple IDs; trace warns about their
-meaning. Import/compaction into or from a legacy store cannot silently promote
-those IDs. Keep old stores, stop their writers, and reimport available captures
-into a new path. If raw captures no longer exist, keep the legacy history and its
-limitations. Do not edit `schema.json` to pretend the store has been migrated.
+Unavailable/expired raw data yields `availability: "unavailable"`; a missing
+explicit original yields `"missing"`. Hash mismatch is an error. Crash-interrupted
+chunks are not published as complete evidence. Exporter records are metadata,
+not original packets, and cannot manufacture packet evidence.
+
+Correlation checks DNS A/AAAA answers and unambiguous CNAME chains (up to 16 links)
+against visible TLS SNI, destination IP, client, sensor, link and time. The smallest
+TTL in the chain and the configured window both apply. Same-source matching is
+the default; `--cross-source` opts into matching other sources from the same
+sensor and explicitly reports clock uncertainty. Results are `inferred`,
+`ambiguous` or `unmatched`, never proof of causality. Hidden SNI and unsupported
+chains remain unmatched. Include earlier DNS answers in `--since-ms` selections.
+Selections are bounded; exceeding correlation limits is an error.
+`timeline --related EVENT_ID` adds one-hop DNS/TLS relations and their flow events
+within a bounded five-minute context. Its envelope states limits/truncation.
+
+Schema-1 histories remain read-only with their old tuple semantics. Reimport
+available originals into a new store; never edit `schema.json` to pretend IDs
+have been migrated. Schema-2 stores from 1.3 remain usable; legacy events retain
+their original evidence scope.
+
+## Module plans, shared predicates and CPL
+
+```sh
+crepe plan --profile chocolate --profile banane
+crepe plan --profile complete --disable http --disable files
+crepe run fixtures/target-reassembly.pcap --config config/target.toml --store ./lab
+```
+
+`plan` lists effective modules, versioned manifests, dependencies and lifecycle.
+Repeated profiles form a union; disabling a required dependency produces a clear
+configuration error. Disabling L7 modules also skips their parsers. Raw retention
+is explicit. Collector-only recipes use the same policy/checkpoint/window engine;
+use `run --profile banane --enable policy --config collector.toml --listen
+127.0.0.1:2055` for exporter CPL. Standalone `collect` (alias `banane`) retains
+its simple exporter interface. Suzette in a profile combination still creates a case
+when no store is specified.
+
+Canonical packet predicates, historical predicates and CPL use one typed AST:
+`src.ip`/`ip.src`, `dst.ip`/`ip.dst`, ports, protocol, comparisons, boolean logic,
+CIDR membership and supported typed fields. Missing values use three-valued
+semantics: negating a missing field does not make it a match. Packet records do
+not contain reassembled L7 fields; query analysis events for those. Existing
+Wireshark/tcpdump compatibility shortcuts are frontends, not complete emulations
+of those languages. Historical/live-window pipelines retain their documented
+aggregation, sorting and bounded-window operators.
+
+Point `policy_rules` at a CPL file (`config/target.cpl` is runnable), for example:
+
+```text
+rule dns-review version "1" on dns.query
+where dns.qname == "example.test." {
+    notice(severity: high, message: "Review this lab domain");
+    tag("lab-domain");
+    metric(name: "lab_dns_queries", value: 1);
+    log(level: info, message: "DNS policy matched");
+}
+```
+
+`rule ID version VERSION` is optional; generated IDs and the program content hash
+identify anonymous rules. `on EVENT where PREDICATE { ACTIONS }` accepts multiline
+formatting. Actions: `notice(severity:, message:)`, `tag(name:, value:)` or
+`tag("label")`, `metric(name:, value:)`, `log(level:, message:)`. Text uses double
+quotes with JSON escapes. The typed predicate vocabulary is shared with CQL.
+Rules can consume `intel.match` as well as protocol events. Effects persist as
+`notice.policy`, `policy.tag`, `policy.metric` and `policy.log`, with rule/program
+versions and source-event IDs. Live recipe metrics are exported through
+`crepe_policy_counter_total`; live logs go to diagnostics. Offline effects remain
+queryable structured events. Legacy JSONL policy files remain supported.
+
+Limits: 64 KiB program, 256 rules, 8 actions/rule, 128 actions/event, 128 metric
+names. Notices are deduplicated and rate-limited centrally; suppressed counts are
+reported in a persisted `policy.summary`. Generated effects do not recursively
+trigger rules. CPL v1 is declarative and passive: no loops, host execution or
+active blocking. Feed changes require restart; findings carry a source hash.
+
+## Independent security retention
+
+```sh
+crepe compact ./history --output ./retained --since-ms 1791417600000 --security-since-ms 1790812800000
+```
+
+The security cutoff applies to `intel.*`, `notice.*`, `anomaly.*` and `policy.*`;
+other observations use `--since-ms`. Omitting the security cutoff uses the common
+cutoff. Compaction creates a new store and preserves the source. Untimed events
+are retained. Raw-cache files are not copied by compaction; their ownership and
+retention remain with the original store. Keep that store or supply originals
+explicitly when investigating the compacted history.
+
+See [target acceptance](TARGET-ACCEPTANCE.md) for the implemented v1 scope,
+reproducible checks and explicit limits.

@@ -200,7 +200,7 @@ pub fn run(args: FlowArgs) -> Result<()> {
             crepe_packet::decode_view(record.data, record.header.clone(), record.linktype)?
         {
             if filter.view_matches(&view) {
-                table.push(&view.event, &mut emit)?;
+                table.push_with_sequence(&view.event, view.tcp_sequence, &mut emit)?;
             }
         }
         Ok(true)

@@ -383,3 +383,89 @@ fn legacy_schema_is_readable_but_never_silently_reinterpreted_or_upgraded() {
     );
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn typed_predicates_match_streaming_and_historical_null_semantics() {
+    let rows = vec![
+        Row {
+            event_id: "one".into(),
+            src_ip: Some("192.0.2.1".into()),
+            dst_port: Some(443),
+            bytes: Some(2048),
+            event_type: "dns.query".into(),
+            payload: r#"{"dns":{"questions":[{"name":"bad.example"}]}}"#.into(),
+            ..Default::default()
+        },
+        Row {
+            event_id: "two".into(),
+            src_ip: Some("2001:db8::1".into()),
+            dst_port: Some(53),
+            bytes: Some(100),
+            payload: "{}".into(),
+            ..Default::default()
+        },
+        Row {
+            event_id: "missing".into(),
+            payload: "{}".into(),
+            ..Default::default()
+        },
+    ];
+    for predicate in [
+        "src.ip in 192.0.2.0/24 && dst.port in [80,443]",
+        "!(dst.port == 443)",
+        "bytes >= 2KB || dst.port == 53",
+        "dns.qname ends_with \"example\"",
+        "ip.src != 192.0.2.2",
+        "ipv6.src in ::/0",
+    ] {
+        let expression = crepe_query::event::parse(predicate).unwrap();
+        let expected: std::collections::BTreeSet<_> = rows
+            .iter()
+            .filter(|r| expression.matches(&serde_json::to_value(r).unwrap()))
+            .map(|r| r.event_id.clone())
+            .collect();
+        let mut out = Vec::new();
+        crepe_storage::query_rows(&rows, &format!("{predicate} | select event.id"), &mut out)
+            .unwrap();
+        let actual: std::collections::BTreeSet<_> = std::str::from_utf8(&out)
+            .unwrap()
+            .lines()
+            .map(|s| {
+                serde_json::from_str::<serde_json::Value>(s).unwrap()["event_id"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        assert_eq!(actual, expected, "{predicate}");
+    }
+}
+
+#[test]
+fn security_retention_is_separate_and_preserves_source() {
+    let root = std::env::temp_dir().join(format!("crepe-class-retention-{}", std::process::id()));
+    let destination = root.with_extension("out");
+    let _ = fs::remove_dir_all(&root);
+    let _ = fs::remove_dir_all(&destination);
+    let mut writer = Writer::begin(&root, &identity(&["classes"])).unwrap();
+    for (id, kind) in [("packet", "packet"), ("notice", "notice.policy")] {
+        writer
+            .push(Row {
+                event_id: id.into(),
+                event_type: kind.into(),
+                timestamp_ms: Some(100),
+                payload: "{}".into(),
+                ..Default::default()
+            })
+            .unwrap();
+    }
+    writer.commit().unwrap();
+    let stats = crepe_storage::compact_classes(&root, &destination, Some(200), Some(0)).unwrap();
+    assert_eq!(stats.retained, 1);
+    assert_eq!(stats.discarded, 1);
+    let mut out = Vec::new();
+    query(&root, "* | count", &mut out).unwrap();
+    assert!(std::str::from_utf8(&out).unwrap().contains("\"count\":2"));
+    fs::remove_dir_all(root).unwrap();
+    fs::remove_dir_all(destination).unwrap();
+}

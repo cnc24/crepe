@@ -50,6 +50,13 @@ fn worker(
     let mut analyzer = crepe_analysis::Processor::partition(
         crepe_analysis::Config {
             dns_ports: vec![config.dns_port],
+            dns: config.active("dns"),
+            files: config.active("files"),
+            protocols: crepe_analysis::ProtocolModules {
+                tls: config.active("tls"),
+                http: config.active("http"),
+                ssh: config.active("ssh"),
+            },
             max_streams: config.max_streams / config.workers,
             max_buffer_bytes: config.max_buffer_bytes / config.workers,
             ..Default::default()
@@ -79,7 +86,11 @@ fn worker(
                     header: packet.header,
                     linktype: packet.link,
                 };
-                let decoded = match record.decode() {
+                let decoded = match crepe_packet::decode_view(
+                    record.data,
+                    record.header.clone(),
+                    record.linktype,
+                ) {
                     Ok(value) => value,
                     Err(error) if config.tolerant_decode && error.code == "CREPE-PKT-001" => {
                         send(Output::Malformed(record.header, error))?;
@@ -87,9 +98,13 @@ fn worker(
                     }
                     Err(error) => return Err(error),
                 };
-                if let Some(packet) = decoded {
+                if let Some(view) = decoded {
+                    let sequence = view.tcp_sequence;
+                    let packet = view.event;
                     let anchor = if config.flows() && packet.header.timestamp_ns.is_some() {
-                        flows.push(&packet, |flow| send(Output::Flow(Box::new(flow))))?;
+                        flows.push_with_sequence(&packet, sequence, |flow| {
+                            send(Output::Flow(Box::new(flow)))
+                        })?;
                         flows.last_assignment()
                     } else {
                         None

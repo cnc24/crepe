@@ -5,6 +5,7 @@ use crepe_core::Result;
 
 pub(crate) struct Filter {
     cql: Option<crepe_query::Expr>,
+    event: Option<crepe_query::event::Expr>,
     needs_application: bool,
     application: Option<String>,
     link: Option<String>,
@@ -15,6 +16,7 @@ impl Filter {
     pub fn new(expression: Option<&str>, syntax: FilterSyntax) -> Result<Self> {
         let mut result = Self {
             cql: None,
+            event: None,
             needs_application: false,
             application: None,
             link: None,
@@ -61,12 +63,22 @@ impl Filter {
                 .trim_start_matches([' ', '(', '!'])
                 .starts_with("proto")
                 && (expression.contains("==") || expression.contains("!=")));
+        let cql_fields = cql_fields || crepe_query::event::parse(expression).is_ok();
         let is_cql = matches!(syntax, FilterSyntax::Cql)
             || (matches!(syntax, FilterSyntax::Auto) && cql_fields);
         if is_cql {
-            let expr = crepe_query::parse(expression)?;
-            result.needs_application = expr.needs_application();
-            result.cql = Some(expr);
+            match crepe_query::event::parse(expression) {
+                Ok(expr) => {
+                    result.event = Some(expr);
+                    result.cql = crepe_query::parse(expression).ok();
+                }
+                Err(shared_error) => {
+                    // Wireshark/tcpdump-style shorthand is a compatibility frontend.
+                    let expr = crepe_query::parse(expression).map_err(|_| shared_error)?;
+                    result.needs_application = expr.needs_application();
+                    result.cql = Some(expr);
+                }
+            }
         } else {
             #[cfg(feature = "live")]
             {
@@ -87,22 +99,28 @@ impl Filter {
         Ok(true)
     }
     pub fn link_matches(&self, protocol: &str) -> bool {
-        self.cql.is_none()
+        self.event.is_none()
+            && self.cql.is_none()
             && self.application.is_none()
             && self.link.as_ref().is_none_or(|name| name == protocol)
     }
     pub fn view_matches(&self, view: &crepe_packet::PacketView<'_>) -> bool {
         self.link.is_none()
-            && self.cql.as_ref().is_none_or(|e| {
-                e.matches_application(
-                    &view.event,
-                    if self.needs_application {
-                        crate::application::protocol(view)
-                    } else {
-                        None
-                    },
-                )
-            })
+            && self
+                .event
+                .as_ref()
+                .is_none_or(|e| e.matches_packet(&view.event))
+            && (self.event.is_some()
+                || self.cql.as_ref().is_none_or(|e| {
+                    e.matches_application(
+                        &view.event,
+                        if self.needs_application {
+                            crate::application::protocol(view)
+                        } else {
+                            None
+                        },
+                    )
+                }))
             && self
                 .application
                 .as_ref()

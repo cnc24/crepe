@@ -2,7 +2,7 @@
 mod functions;
 mod hot;
 mod maintenance;
-pub use maintenance::{compact, Compaction};
+pub use maintenance::{compact, compact_classes, Compaction};
 mod query;
 use crepe_core::{Error, Result};
 use datafusion::{
@@ -567,4 +567,11 @@ fn execute_query(
         .await
         .map_err(|_| err("query exceeded 30 seconds"))?
     })
+}
+
+/// Hold the existing store writer lock for raw-only maintenance.
+pub fn exclusive<T>(root: &Path, operation: impl FnOnce() -> Result<T>) -> Result<T> {
+    validate_writable(root)?;
+    let _guard = StoreLock::acquire(root)?;
+    operation()
 }

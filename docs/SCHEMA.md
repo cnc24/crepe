@@ -6,9 +6,9 @@ be added. Consumers must ignore unknown fields/kinds and inspect
 `schema_version`. Rust crates are workspace implementation APIs and are not
 published to crates.io as a stable external SDK.
 
-Packet JSON uses schema 2. Flow JSON uses schema 3 from 1.3.0, adding
-`first_sequence`: the original capture-record anchor of an observed flow instance. Application JSON
-uses schema 1, with `packet`, `dns`, `protocol`, `anomaly`, `midstream` and
+Packet JSON uses schema 2. Flow JSON uses schema 4 from 1.4.0, adding the `tcp_reuse` end reason.
+Schema 3 introduced `first_sequence`: the original capture-record anchor of an observed flow instance. Application JSON
+uses schema 2, adding `evidence` (packet references, completeness and scope), with `packet`, `dns`, `protocol`, `anomaly`, `midstream` and
 `reassembled`. `event_type` is `dns.query`, `dns.response`, `protocol` or
 `anomaly`; the tagged `protocol.type` distinguishes TLS, HTTP and SSH events.
 Only the completion event for a fragmented datagram has `reassembled=true`.
@@ -51,7 +51,7 @@ packet-derived instances based only on a matching tuple.
 
 Schema-1 stores remain readable with their ORIGINAL tuple-level `flow_id`
 semantics and null new columns. Trace warns about this distinction. They are
-read-only in 1.3.0: imports and compaction cannot silently upgrade them. Reimport
+read-only from 1.3.0: imports and compaction cannot silently upgrade them. Reimport
 original captures into a NEW store for schema-2 identities. Without originals,
 retain the old store and its known limitations; do not manufacture instance IDs.
 
@@ -169,3 +169,30 @@ have no `src`/`dst` IP endpoint. Existing IP packet JSON is unchanged. Packet CS
 appends `src_mac,dst_mac,ether_type,linktype` to its original 13 columns. Consumers
 should inspect `proto` and the available endpoint fields rather than assuming
 every capture frame is IP.
+
+## Evidence and policy additions (1.4.0)
+
+Historical Arrow schema remains 2. Analysis payload schema 2 adds
+`evidence.records` entries `{sequence, section, interface}`, `complete`, and
+`scope`. Scope includes observed directional stream context and retransmissions;
+it is not a minimal byte map. At most 4096 references are stored per state,
+charged to memory limits. Overflow/anomaly evidence does not claim completeness.
+Flow payload schema 4 adds `end_reason = tcp_reuse` for an observed new SYN.
+Old analysis schema-1 events remain readable with their single-packet anchor.
+
+CPL effects are historical rows `notice.policy`, `policy.tag`, `policy.metric`
+and `policy.log`. Payload contains `source_event_id` and `effect` with
+`rule_id`, `rule_version`, `program_version` (BLAKE3 of the original CPL text),
+`event_type`, and action `data`. `policy.summary` records suppressed-notice
+counts. Intel/legacy-rule findings add `source_version` (content hash of their
+input feed/rules). These additive payload fields require no Parquet migration.
+
+Raw manifests live under `STORE/raw/manifest.json`, separately from telemetry.
+Entries retain source identity, content hash, byte count, wall-clock creation and
+expiry, plus the first original packet reference/count for live PCAP chunks.
+Original imports remain unchanged PCAP/PCAPNG; the reader detects their magic.
+A manifest is provenance metadata, not a cryptographic signature of the operator.
+Evidence always hashes the referenced raw file before and after reading it.
+
+Additional error families: `CREPE-CPL-001` for policy syntax/action limits,
+`CREPE-RAW-001` for raw retention/manifest errors. Existing error families remain.

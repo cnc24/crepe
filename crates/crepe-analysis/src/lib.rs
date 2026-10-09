@@ -1,9 +1,10 @@
 //! Bounded application analysis over reconstructed IP and TCP streams.
 mod processor;
-use crepe_core::{Error, PacketEvent, Protocol, Result};
+use crepe_core::{Error, PacketEvent, PacketEvidence, Protocol, Result};
 use crepe_dns::Message;
 use crepe_flow::FlowKey;
 use crepe_packet::PacketView;
+pub use crepe_protocol::Enabled as ProtocolModules;
 use crepe_stream::{Limits, Stream};
 pub use processor::Processor;
 use serde::Serialize;
@@ -26,6 +27,7 @@ pub struct Anomaly {
 }
 #[derive(Debug, Clone, Serialize)]
 pub struct Event {
+    pub evidence: PacketEvidence,
     pub schema_version: u16,
     pub event_type: Kind,
     pub packet: PacketEvent,
@@ -37,6 +39,9 @@ pub struct Event {
 }
 #[derive(Debug, Clone)]
 pub struct Config {
+    pub dns: bool,
+    pub files: bool,
+    pub protocols: ProtocolModules,
     pub dns_ports: Vec<u16>,
     pub max_streams: usize,
     pub max_buffer_bytes: usize,
@@ -47,6 +52,9 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             dns_ports: vec![53],
+            dns: true,
+            files: true,
+            protocols: Default::default(),
             max_streams: 1024,
             max_buffer_bytes: 4 * 1024 * 1024,
             idle_secs: 120,
@@ -56,6 +64,7 @@ impl Default for Config {
 }
 #[derive(Debug)]
 struct State {
+    evidence: PacketEvidence,
     stream: Stream,
     framing: Vec<u8>,
     packet: PacketEvent,
@@ -68,7 +77,10 @@ struct State {
 }
 impl State {
     fn size(&self) -> usize {
-        self.stream.buffered_bytes() + self.framing.capacity() + self.file.buffered_bytes()
+        self.stream.buffered_bytes()
+            + self.framing.capacity()
+            + self.file.buffered_bytes()
+            + self.evidence.memory_bytes()
     }
 }
 type Key = (FlowKey, bool);
@@ -128,8 +140,12 @@ impl Analyzer {
         code: &'static str,
         message: impl Into<String>,
     ) -> Event {
+        let mut evidence = PacketEvidence::packet(&packet.header);
+        evidence.complete = false;
+        evidence.scope = "anomaly anchor; complete reassembly is not established".into();
         Event {
-            schema_version: 1,
+            evidence,
+            schema_version: 2,
             event_type: Kind::Anomaly,
             packet: packet.clone(),
             dns: None,
@@ -145,7 +161,8 @@ impl Analyzer {
     fn dns(packet: &PacketEvent, bytes: &[u8], midstream: bool) -> Event {
         match crepe_dns::parse(bytes) {
             Ok(dns) => Event {
-                schema_version: 1,
+                evidence: PacketEvidence::packet(&packet.header),
+                schema_version: 2,
                 event_type: if dns.response {
                     Kind::DnsResponse
                 } else {
@@ -181,6 +198,14 @@ impl Analyzer {
     pub fn process(
         &mut self,
         view: &PacketView<'_>,
+        emit: impl FnMut(Event) -> Result<()>,
+    ) -> Result<()> {
+        self.process_referenced(view, PacketEvidence::packet(&view.event.header), emit)
+    }
+    pub fn process_referenced(
+        &mut self,
+        view: &PacketView<'_>,
+        evidence: PacketEvidence,
         mut emit: impl FnMut(Event) -> Result<()>,
     ) -> Result<()> {
         let p = &view.event;
@@ -203,9 +228,14 @@ impl Analyzer {
             .iter()
             .flatten()
             .any(|port| self.config.dns_ports.contains(port));
+        if dns_candidate && !self.config.dns {
+            return Ok(());
+        }
         if p.proto == Protocol::Udp {
             if dns_candidate {
-                emit(Self::dns(p, view.payload, false))?;
+                let mut event = Self::dns(p, view.payload, false);
+                event.evidence = evidence;
+                emit(event)?;
             }
             return Ok(());
         }
@@ -285,6 +315,7 @@ impl Analyzer {
                 ))?;
             }
             State {
+                evidence: evidence.clone(),
                 stream: Stream::new(sequence.wrapping_add(u32::from(syn)), self.config.stream)?,
                 framing: Vec::new(),
                 packet: p.clone(),
@@ -296,6 +327,7 @@ impl Analyzer {
                 request_method: None,
             }
         };
+        state.evidence.merge(&evidence);
         state.timestamp = state.timestamp.max(time);
         state.packet = p.clone();
         let contiguous =
@@ -306,17 +338,20 @@ impl Analyzer {
                 Ok(data) => data,
                 Err(e) => return emit(Self::anomaly(p, state.midstream, e.code, e.message)),
             };
-        if !dns_candidate {
-            let method = self
-                .streams
-                .get(&(key.0.clone(), !key.1))
-                .and_then(|opposite| opposite.request_method.as_deref());
+        if !dns_candidate && self.config.files {
+            let opposite = self.streams.get(&(key.0.clone(), !key.1));
+            let method = opposite.and_then(|state| state.request_method.as_deref());
+            let mut file_evidence = state.evidence.clone();
+            if let Some(opposite) = opposite.filter(|s| s.request_method.is_some()) {
+                file_evidence.merge(&opposite.evidence);
+            }
             state
                 .file
                 .allow_response(method.is_some_and(|m| m != "HEAD" && m != "CONNECT"));
             match state.file.push(&contiguous) {
                 Ok(Some(file)) => emit(Event {
-                    schema_version: 1,
+                    evidence: file_evidence,
+                    schema_version: 2,
                     event_type: Kind::Protocol,
                     packet: p.clone(),
                     dns: None,
@@ -368,13 +403,14 @@ impl Analyzer {
             ));
         }
         if !dns_candidate {
-            match crepe_protocol::inspect(&state.framing) {
+            match crepe_protocol::inspect_enabled(&state.framing, self.config.protocols) {
                 Ok(crepe_protocol::Inspection::Event(protocol)) => {
                     if let crepe_protocol::Event::HttpRequest { method, .. } = &protocol {
                         state.request_method = Some(method.clone());
                     }
                     emit(Event {
-                        schema_version: 1,
+                        evidence: state.evidence.clone(),
+                        schema_version: 2,
                         event_type: Kind::Protocol,
                         packet: p.clone(),
                         dns: None,
@@ -441,11 +477,13 @@ impl Analyzer {
                     "DNS messages-per-packet work limit exceeded",
                 ));
             }
-            emit(Self::dns(
+            let mut event = Self::dns(
                 p,
                 &state.framing[consumed + 2..consumed + 2 + size],
                 state.midstream,
-            ))?;
+            );
+            event.evidence = state.evidence.clone();
+            emit(event)?;
             consumed += size + 2;
         }
         state.framing.drain(..consumed);

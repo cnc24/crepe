@@ -1,4 +1,5 @@
 //! Offline, bounded indicator matching and observational rules. No active actions.
+pub mod cpl;
 use crepe_core::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, net::IpAddr};
@@ -32,6 +33,7 @@ pub struct Finding {
     pub code: &'static str,
     pub severity: String,
     pub source: String,
+    pub source_version: String,
     pub field: String,
     pub value: String,
     pub message: String,
@@ -41,6 +43,9 @@ pub struct Engine {
     exact: BTreeMap<(String, String), Vec<Indicator>>,
     networks: Vec<(ipnet::IpNet, Indicator)>,
     rules: Vec<Rule>,
+    pub cpl: Option<cpl::Program>,
+    feed_version: String,
+    rules_version: String,
 }
 fn error(message: impl std::fmt::Display) -> Error {
     Error::new("CREPE-INTEL-001", message)
@@ -64,6 +69,20 @@ fn domain(value: &str) -> Result<String> {
     }
     Ok(value)
 }
+pub fn normalize_url(value: &str) -> Result<String> {
+    let mut url = url::Url::parse(value).map_err(error)?;
+    if !["http", "https"].contains(&url.scheme())
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+    {
+        return Err(error(
+            "URL indicator requires HTTP(S), a host and no user credentials",
+        ));
+    }
+    url.set_fragment(None);
+    Ok(url.into())
+}
 fn lines<T: for<'de> Deserialize<'de>>(text: &str, limit: usize) -> Result<Vec<T>> {
     if text.len() > 8 * 1024 * 1024 {
         return Err(error("feed exceeds 8 MiB"));
@@ -79,10 +98,17 @@ fn lines<T: for<'de> Deserialize<'de>>(text: &str, limit: usize) -> Result<Vec<T
 }
 impl Engine {
     pub fn is_empty(&self) -> bool {
-        self.exact.is_empty() && self.networks.is_empty() && self.rules.is_empty()
+        self.exact.is_empty()
+            && self.networks.is_empty()
+            && self.rules.is_empty()
+            && self.cpl.is_none()
     }
     pub fn new(indicators: &str, rules: &str) -> Result<Self> {
-        let mut engine = Self::default();
+        let mut engine = Self {
+            feed_version: blake3::hash(indicators.as_bytes()).to_hex().to_string(),
+            rules_version: blake3::hash(rules.as_bytes()).to_hex().to_string(),
+            ..Default::default()
+        };
         for mut entry in lines::<Indicator>(indicators, 65536)? {
             if entry.source.is_empty() || entry.source.len() > 256 || !severity(&entry.severity) {
                 return Err(error("invalid source or severity"));
@@ -90,6 +116,7 @@ impl Engine {
             match entry.kind.as_str() {
                 "ip" => entry.value = entry.value.parse::<IpAddr>().map_err(error)?.to_string(),
                 "domain" => entry.value = domain(&entry.value)?,
+                "url" => entry.value = normalize_url(&entry.value)?,
                 "sha256" => {
                     if entry.value.len() != 64
                         || !entry.value.bytes().all(|b| b.is_ascii_hexdigit())
@@ -107,7 +134,11 @@ impl Engine {
                         .push((entry.value.parse().map_err(error)?, entry));
                     continue;
                 }
-                _ => return Err(error("indicator kind must be ip, domain, cidr or sha256")),
+                _ => {
+                    return Err(error(
+                        "indicator kind must be ip, domain, url, cidr or sha256",
+                    ))
+                }
             }
             let entries = engine
                 .exact
@@ -118,7 +149,11 @@ impl Engine {
             }
             entries.push(entry);
         }
-        engine.rules = lines::<Rule>(rules, 256)?;
+        if rules.trim_start().starts_with("on ") || rules.trim_start().starts_with("rule ") {
+            engine.cpl = Some(cpl::Program::parse(rules)?);
+        } else {
+            engine.rules = lines::<Rule>(rules, 256)?;
+        }
         for rule in &engine.rules {
             if rule.id.is_empty()
                 || rule.id.len() > 128
@@ -151,11 +186,17 @@ impl Engine {
                 "src.ip" | "dst.ip" => "ip",
                 "domain" => "domain",
                 "sha256" => "sha256",
+                "url" => "url",
                 _ => continue,
             };
             for value in values.iter().take(256) {
                 let normalized = if kind == "domain" {
                     match domain(value) {
+                        Ok(v) => v,
+                        Err(_) => continue,
+                    }
+                } else if kind == "url" {
+                    match normalize_url(value) {
                         Ok(v) => v,
                         Err(_) => continue,
                     }
@@ -185,6 +226,7 @@ impl Engine {
                         code: "CREPE-INTEL-MATCH",
                         severity: entry.severity.clone(),
                         source: entry.source.clone(),
+                        source_version: self.feed_version.clone(),
                         field: field.clone(),
                         value: normalized.clone(),
                         message: "Observed indicator match; not proof of malicious activity".into(),
@@ -206,6 +248,7 @@ impl Engine {
                     code: "CREPE-NOTICE-POLICY",
                     severity: rule.severity.clone(),
                     source: rule.id.clone(),
+                    source_version: self.rules_version.clone(),
                     field: rule.field.clone(),
                     value: rule.equals.clone(),
                     message: rule.message.clone(),
@@ -241,5 +284,31 @@ mod tests {
         )
         .is_err());
         assert!(Engine::new(&" ".repeat(8 * 1024 * 1024 + 1), "").is_err());
+    }
+}
+
+#[cfg(test)]
+mod url_tests {
+    use super::*;
+    #[test]
+    fn url_path_case_and_feed_version_are_preserved() {
+        let engine = Engine::new(
+            r#"{"kind":"url","value":"http://Example.TEST/Case?q=1","source":"fixture"}"#,
+            "",
+        )
+        .unwrap();
+        let findings = engine.inspect(
+            "http.request",
+            &BTreeMap::from([("url".into(), vec!["http://example.test/Case?q=1".into()])]),
+        );
+        assert_eq!(findings.len(), 1);
+        assert_eq!(findings[0].source_version.len(), 64);
+        assert!(engine
+            .inspect(
+                "http.request",
+                &BTreeMap::from([("url".into(), vec!["http://example.test/case?q=1".into()])])
+            )
+            .is_empty());
+        assert!(normalize_url("file:///etc/passwd").is_err());
     }
 }

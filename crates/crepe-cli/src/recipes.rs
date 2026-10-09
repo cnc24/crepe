@@ -108,15 +108,25 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
     if config.disabled_modules.iter().any(|m| m == "notices") {
         config.notices = false;
     }
-    config.validate()?;
+    config.enabled_modules.extend(args.enable.iter().cloned());
+    if args.listen.is_some() {
+        config.enabled_modules.push("collector".into());
+    }
+    config.raw.enabled |= args.keep_raw;
+    if !args.profiles.is_empty() {
+        config.profiles = args.profiles.iter().copied().map(Into::into).collect();
+    }
     if !matches!(profile, Profile::Maison) {
         config.profile = profile;
     }
-    if matches!(config.profile, Profile::Banane) {
-        return Err(Error::new(
-            "CREPE-CONFIG-001",
-            "Use crepe banane to run the UDP collector.",
-        ));
+    config.validate()?;
+    let plan = crepe_engine::modules::resolve(&config)?;
+    crate::report!("Effective modules: {}", plan.modules.join(", "));
+    if !config.packets() {
+        if config.raw.enabled {
+            return Err(Error::new("CREPE-RAW-001", "Raw packet retention needs a packet source; exporter records are retained as observations."));
+        }
+        return crate::history::collect_recipe(&args, &config);
     }
     if args.file.is_none() && args.interface.is_none() {
         select_source(profile, &mut args)?;
@@ -127,7 +137,14 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
             "live collection/query requires a network interface, not a capture file",
         ));
     }
-    let forensic = matches!(config.profile, Profile::Suzette);
+    let forensic = if config.profiles.is_empty() {
+        matches!(config.profile, Profile::Suzette)
+    } else {
+        config
+            .profiles
+            .iter()
+            .any(|p| matches!(p, Profile::Suzette))
+    };
     if forensic && args.store.is_none() {
         let root = std::env::current_dir()
             .map_err(|e| Error::new("CREPE-IO-002", e))?
@@ -142,7 +159,7 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
     }
     if let Some(store) = args.store.as_ref().filter(|_| forensic) {
         crate::report!(
-            "Forensic case: {}. Observations will be retained; the source capture is not copied.",
+            "Forensic case: {}. Observations will be retained; raw capture retention requires --keep-raw or raw.enabled.",
             store.display()
         );
     }
@@ -199,6 +216,7 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
                     )
                 },
                 &mut |row| {
+                    crate::metrics::observe(row);
                     crate::metrics::EVENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     match &window {
                         Some(window) => window.borrow_mut().push(row),
