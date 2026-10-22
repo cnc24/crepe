@@ -100,10 +100,13 @@ pub(crate) struct FlowArgs {
 #[derive(Subcommand)]
 pub(crate) enum Command {
     /// Summarize capture traffic: hierarchy, top talkers, protocols and packet counts.
+    #[command(visible_alias = "bilan")]
     Stats(crate::stats::Args),
     /// Resolve profiles, module dependencies and resource settings without capturing traffic.
+    #[command(visible_alias = "menu")]
     Plan(PlanArgs),
     /// Apply raw-only retention to manifest-owned captures; historical observations remain intact.
+    #[command(visible_alias = "nettoyer")]
     RawPrune {
         store: PathBuf,
         #[arg(long, default_value_t = 86400)]
@@ -112,6 +115,7 @@ pub(crate) enum Command {
         max_bytes: u64,
     },
     /// Relate stored DNS answers to TLS ClientHello observations with explicit evidence.
+    #[command(visible_alias = "relier")]
     Correlate {
         /// Permit same-sensor associations across captures; clock alignment remains unverified.
         #[arg(long)]
@@ -129,6 +133,7 @@ pub(crate) enum Command {
         until_ms: Option<i64>,
     },
     /// Locate a stored event's referenced/anchor packet in a verified original capture.
+    #[command(visible_alias = "preuve")]
     Evidence {
         /// Existing history directory.
         store: PathBuf,
@@ -142,10 +147,13 @@ pub(crate) enum Command {
         write: Option<PathBuf>,
     },
     /// Print the Crepe mascot and wordmark as plain ASCII.
+    #[command(visible_alias = "mascotte")]
     Logo,
     /// Print the embedded project license and third-party notices (also retained by self-updates).
+    #[command(visible_alias = "licences")]
     Licenses,
     /// Check GitHub for a stable release and atomically update an archive installation.
+    #[command(visible_alias = "actualiser")]
     Update {
         /// Report availability without installing anything.
         #[arg(long, conflicts_with = "output")]
@@ -155,6 +163,7 @@ pub(crate) enum Command {
         output: Option<PathBuf>,
     },
     /// Read PCAP/PCAPNG packets and link frames with an optional packet/application filter.
+    #[command(visible_alias = "lire")]
     Read {
         /// Input PCAP/PCAPNG capture file.
         file: PathBuf,
@@ -165,8 +174,10 @@ pub(crate) enum Command {
     #[command(
         after_help = "Packet filters (before aggregation):\n  'src 192.0.2.10'                  tcpdump/BPF\n  'ip.src == 192.0.2.10'            Wireshark field alias\n\nFlow queries (same CQL as crepe query; after aggregation):\n  crepe flows traffic.pcap --query '* | sort packets desc | limit 10'\n  crepe flows traffic.pcap 'bytes > 1000 | sort bytes desc'\n  crepe flows traffic.pcap '* | count'\n  crepe flows traffic.pcap '* | group src.ip,dst.ip | sort count desc'\n\nCreate and reuse a flow database:\n  crepe flows traffic.pcap --store ./flows\n  crepe flows ./flows '* | sort bytes desc | limit 10'\n  crepe query ./flows '* | group src.ip | sort bytes desc'\n\nCorrelate by conversation identity (64-character flow_id from query output):\n  crepe query ./flows '* | select flow.id,src.ip,dst.ip,packets,bytes'\n  crepe trace ./flows FLOW_ID\nFor DNS/TLS/HTTP correlation use forensics FILE --store CASE instead; a flow-only\nstore contains flow records, not packet/application observations.\n\nFlows are bidirectional. In flow queries src/dst are canonical left/right endpoints.\nPacket prefilters can reduce counters; --query filters complete aggregated flows.\nQuery output is limited to 10,000 rows; --store retains all generated records."
     )]
+    #[command(visible_alias = "flux")]
     Flows(FlowArgs),
     /// Analyze DNS, TLS hello, HTTP/1.1 and SSH metadata after IP/TCP reassembly.
+    #[command(visible_alias = "analyser")]
     Analyze {
         /// Input PCAP/PCAPNG capture file.
         file: PathBuf,
@@ -202,6 +213,7 @@ pub(crate) enum Command {
     #[command(name = "full", alias = "complete")]
     Complete(RecipeArgs),
     /// Run a configured live sensor under a service manager.
+    #[command(visible_alias = "veille")]
     Daemon {
         #[arg(long, default_value = "/etc/crepe/crepe.toml")]
         config: PathBuf,
@@ -210,8 +222,10 @@ pub(crate) enum Command {
         duration: u64,
     },
     /// Show the available recipes and their stored observations.
+    #[command(visible_alias = "recettes")]
     Profiles,
     /// Import observations as an atomic Parquet batch.
+    #[command(visible_alias = "importer")]
     Ingest {
         /// Input PCAP/PCAPNG capture file.
         file: PathBuf,
@@ -227,6 +241,7 @@ pub(crate) enum Command {
         profile: Option<Profile>,
     },
     /// Query historical observations with a CQL pipeline (JSON Lines).
+    #[command(visible_alias = "chercher")]
     Query {
         /// Historical store directory containing committed observation batches.
         store: PathBuf,
@@ -235,6 +250,7 @@ pub(crate) enum Command {
         cql: String,
     },
     /// Compact a stopped store into a NEW destination, optionally retaining recent rows.
+    #[command(visible_alias = "ranger")]
     Compact {
         /// Separate cutoff for Intel/notice/anomaly/policy rows (Unix milliseconds).
         #[arg(long, allow_hyphen_values = true)]
@@ -248,6 +264,7 @@ pub(crate) enum Command {
         since_ms: Option<i64>,
     },
     /// Show all observations for an observed flow-instance ID in time order.
+    #[command(visible_alias = "pister")]
     Trace {
         /// Existing historical store directory.
         store: PathBuf,
@@ -255,6 +272,7 @@ pub(crate) enum Command {
         flow_id: String,
     },
     /// Show a chronological observation timeline.
+    #[command(visible_alias = "chronologie")]
     Timeline {
         /// Focus on an event, related DNS/TLS flows and their Intel/policy evidence.
         #[arg(long)]
@@ -266,6 +284,7 @@ pub(crate) enum Command {
         limit: u32,
     },
     /// Validate and print effective configuration.
+    #[command(visible_alias = "reglages")]
     Config {
         /// Optional TOML file layered over system/user configuration.
         file: Option<PathBuf>,

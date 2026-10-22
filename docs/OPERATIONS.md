@@ -12,34 +12,40 @@ Every command supports `-h` and `--help`, including workflow examples. Start wit
 `crepe profiles -h` to choose a recipe, `crepe read -h` for packet filters and
 byte dumps, `crepe flows -h` for flow statistics, or `crepe query -h` for history.
 Aliases share their command's help: `crepe chocolate -h` and `crepe inspect -h`
-describe the same workflow.
+describe the same workflow. French aliases are optional, accept exactly the same
+arguments, and do not change the analysis profile or output. They use ASCII
+spelling (for example `reglages`) so they are easy to type in a terminal.
+Try `crepe lire example.pcap -c 5`, `crepe bilan example.pcap protocols`,
+or `crepe recettes -h`.
 
 | Command | Alias | What it does / common options |
 | --- | --- | --- |
-| `read FILE [FILTER]` | — | Packet/link summaries; `-v`/`-vv`, `-A`, `-X`/`-XX` (combinable as `-vvX`), `--format table\|json\|csv`, `-c N`/`--limit N`, `--write FILE`, `--tolerant`, `--filter-syntax auto\|cql\|bpf` |
+| `read FILE [FILTER]` | `lire` | Packet/link summaries; `-v`/`-vv`, `-A`, `-X`/`-XX` (combinable as `-vvX`), `--format table\|json\|csv`, `-c N`/`--limit N`, `--write FILE`, `--tolerant`, `--filter-syntax auto\|cql\|bpf` |
 | `capture -i IFACE [FILTER]` | `sucre` | Live packet summaries; read options plus `--duration SECONDS`, `--count N`, `--bpf FILTER`, `--promisc` |
 | `interfaces` | `interface` | List available capture interfaces |
-| `stats FILE [REPORT_OR_FILTER]` | — | Hierarchy, top talkers, protocols, packet/flag counts; `--filter`, `--top`, `--sort`, `-c`, `--format table\|markdown\|csv\|json`, `-o NEW_FILE` |
-| `flows FILE_OR_STORE [FILTER_OR_QUERY]` | — | TCP/UDP flows; `--store DIR`, `--query CQL`, `--sort packets\|bytes\|flows`, `--group FIELDS`, `--count`, `--limit N`, `--details` |
-| `analyze FILE` | — | Reassembly and application observations; `--format table\|json\|csv`, `--dns-port`, `--max-streams`, `--max-buffer-bytes`, `--stream-idle` |
+| `stats FILE [REPORT_OR_FILTER]` | `bilan` | Hierarchy, top talkers, protocols, packet/flag counts; `--filter`, `--top`, `--sort`, `-c`, `--format table\|markdown\|csv\|json`, `-o NEW_FILE` |
+| `flows FILE_OR_STORE [FILTER_OR_QUERY]` | `flux` | TCP/UDP flows; `--store DIR`, `--query CQL`, `--sort packets\|bytes\|flows`, `--group FIELDS`, `--count`, `--limit N`, `--details` |
+| `analyze FILE` | `analyser` | Reassembly and application observations; `--format table\|json\|csv`, `--dns-port`, `--max-streams`, `--max-buffer-bytes`, `--stream-idle` |
 | `inspect [FILE]` | `chocolate` | Deep-analysis recipe; without a source, opens the interactive menu |
 | `forensics [FILE]` | `suzette` | Persistent forensic case; `--store DIR` selects the history location |
 | `run [FILE] --config FILE` | `maison` | Analysis using your own configuration |
 | `full [FILE]` | `complete` | All implemented observation modules |
-| `profiles` | — | List recipes and descriptions |
-| `ingest FILE --store DIR` | — | Import into persistent history; `--profile`, `--sensor`, `--config` |
-| `query DIR [CQL]` | — | Query stored observations; default `*`, JSON Lines output |
-| `trace DIR FLOW_ID` | — | Stored observations for an observed connection instance (schema 2) |
-| `correlate DIR` | — | Infer DNS/TLS relationships; `--window SECONDS`, `--since-ms`, `--until-ms` |
-| `evidence DIR EVENT_ID` | — | Locate original packet evidence; `--capture FILE`, `--write NEW_PCAP` |
-| `timeline DIR --limit N` | — | Chronological stored observations |
+| `profiles` | `recettes` | List recipes and descriptions |
+| `ingest FILE --store DIR` | `importer` | Import into persistent history; `--profile`, `--sensor`, `--config` |
+| `query DIR [CQL]` | `chercher` | Query stored observations; default `*`, JSON Lines output |
+| `trace DIR FLOW_ID` | `pister` | Stored observations for an observed connection instance (schema 2) |
+| `correlate DIR` | `relier` | Infer DNS/TLS relationships; `--window SECONDS`, `--since-ms`, `--until-ms` |
+| `evidence DIR EVENT_ID` | `preuve` | Locate original packet evidence; `--capture FILE`, `--write NEW_PCAP` |
+| `timeline DIR --limit N` | `chronologie` | Chronological stored observations |
 | `collect` | `banane` | Receive NetFlow v5/v9/IPFIX; `--listen IP:PORT`, `--duration SECONDS`, `--count N`, `--store DIR`, `--sensor NAME` |
-| `update [--check] [--output NEW_PATH]` | — | Check/install the latest stable official archive; see update instructions below |
-| `logo` | — | Print the mascot and wordmark as plain ASCII; can be redirected to a file |
-| `licenses` | — | Print embedded project license and third-party notices |
-| `config [FILE]` | — | Validate and show effective configuration |
-| `daemon --config FILE` | — | Configured live sensor; optional `--duration SECONDS` |
-| `compact DIR --output NEW_DIR` | — | Copy/compact a stopped history store; optional `--since-ms UNIX_MS` |
+| `update [--check] [--output NEW_PATH]` | `actualiser` | Check/install the latest stable official archive; see update instructions below |
+| `logo` | `mascotte` | Print the mascot and wordmark as plain ASCII; can be redirected to a file |
+| `licenses` | `licences` | Print embedded project license and third-party notices |
+| `config [FILE]` | `reglages` | Validate and show effective configuration |
+| `daemon --config FILE` | `veille` | Configured live sensor; optional `--duration SECONDS` |
+| `plan [--config FILE]` | `menu` | Resolve profiles and module dependencies without capture |
+| `raw-prune DIR` | `nettoyer` | Apply raw capture retention; `--max-age-seconds`, `--max-bytes` |
+| `compact DIR --output NEW_DIR` | `ranger` | Copy/compact a stopped history store; optional `--since-ms UNIX_MS` |
 
 The four analysis recipes share `-i IFACE` (instead of FILE), `--duration`,
 `--store`, `--config`, `--enable MODULE`, `--disable MODULE`, `--tolerant` and

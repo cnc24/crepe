@@ -2076,3 +2076,49 @@ fn stats_empty_malformed_and_container_errors_are_explicit() {
     assert!(!broken.status.success());
     assert!(broken.stdout.is_empty());
 }
+
+#[test]
+fn french_aliases_share_help_and_packet_results() {
+    for (command, alias) in [
+        ("stats", "bilan"),
+        ("plan", "menu"),
+        ("raw-prune", "nettoyer"),
+        ("correlate", "relier"),
+        ("evidence", "preuve"),
+        ("logo", "mascotte"),
+        ("licenses", "licences"),
+        ("update", "actualiser"),
+        ("read", "lire"),
+        ("flows", "flux"),
+        ("analyze", "analyser"),
+        ("daemon", "veille"),
+        ("profiles", "recettes"),
+        ("ingest", "importer"),
+        ("query", "chercher"),
+        ("compact", "ranger"),
+        ("trace", "pister"),
+        ("timeline", "chronologie"),
+        ("config", "reglages"),
+    ] {
+        let canonical = cli().args([command, "--help"]).output().unwrap();
+        let alternate = cli().args([alias, "--help"]).output().unwrap();
+        assert!(canonical.status.success(), "{command}");
+        assert!(alternate.status.success(), "{alias}");
+        assert_eq!(canonical.stdout, alternate.stdout, "{alias}");
+    }
+    for (command, alias) in [("read", "lire"), ("stats", "bilan"), ("flows", "flux")] {
+        let run = |name: &str| {
+            cli()
+                .arg(name)
+                .arg(fixture("example.pcap"))
+                .args(["--format", "json"])
+                .output()
+                .unwrap()
+        };
+        let canonical = run(command);
+        let alternate = run(alias);
+        assert!(canonical.status.success(), "{command}");
+        assert!(alternate.status.success(), "{alias}");
+        assert_eq!(canonical.stdout, alternate.stdout, "{alias}");
+    }
+}

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Add 19 optional French command aliases, displayed alongside canonical commands in help and documented in the operating guide. Existing recipe aliases and command behavior remain unchanged.
+
 ## 1.5.0 — 2026-10-22
 
 - Treat the CQL wildcard `*` as all packets, including non-IP link frames.
