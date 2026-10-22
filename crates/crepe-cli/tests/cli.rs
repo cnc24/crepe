@@ -2122,3 +2122,40 @@ fn french_aliases_share_help_and_packet_results() {
         assert_eq!(canonical.stdout, alternate.stdout, "{alias}");
     }
 }
+
+#[test]
+fn diagnostics_are_actionable_and_runtime_failures_are_neutral() {
+    for query in ["dst.port == \"hallo\"", "dst.port == 70000"] {
+        let output = cli()
+            .arg("read")
+            .arg(fixture("example.pcap"))
+            .arg(query)
+            .args(["--log-format", "json"])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let log: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
+        assert_eq!(log["severity"], "error");
+        let text = log["message"].as_str().unwrap();
+        assert!(text.contains("column 13"));
+        assert!(text.contains("Try: dst.port == 443"));
+        assert!(!text.contains("Sacré"));
+    }
+    let output = cli()
+        .args(["--log-format=json", "nonsense"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    let log: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
+    assert_eq!(log["severity"], "error");
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("broken.pcap");
+    std::fs::write(&file, b"broken capture").unwrap();
+    let output = cli().arg("read").arg(file).output().unwrap();
+    assert!(!output.status.success());
+    let text = String::from_utf8(output.stderr).unwrap();
+    assert!(text.contains("CREPE-"));
+    assert!(!text.contains("Sacré"));
+    assert!(!text.contains("Zut"));
+}

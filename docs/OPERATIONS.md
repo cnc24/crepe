@@ -1179,3 +1179,40 @@ explicitly when investigating the compacted history.
 
 See [target acceptance](TARGET-ACCEPTANCE.md) for the implemented v1 scope,
 reproducible checks and explicit limits.
+
+
+## Diagnostics and compatibility contract (1.5.1)
+
+Invalid CLI usage and invalid CQL return exit status 2 and structured severity
+`error`. Runtime failures return status 1; malformed-input recovery warnings use
+severity `warning`. Severity is independent of French wording. Runtime errors,
+skipped malformed records and capture-loss summaries are neutral even without
+`--serious`. Friendly usage errors and recipe introductions retain optional humor.
+`--log-format json` always removes flair and leaves result stdout separate.
+
+Typed CQL predicate errors show line/column, byte offsets and a bounded source
+excerpt. Positions refer to the parsed predicate (inside a pipeline or CPL rule,
+they are relative to that predicate). Invalid ports include the 0..65535 range
+and an example such as `dst.port == 443`. The error code stays `CREPE-CQL-001`;
+location and guidance are in the JSON diagnostic's `message` string. Pipeline
+stage validation and libpcap/BPF errors retain their own messages; these are not
+claimed to have the shared predicate parser's source spans.
+
+| Other tool feature | Crepe contract |
+| --- | --- |
+| tcpdump filters | libpcap BPF in live-enabled/official builds; use `--filter-syntax bpf` to force it |
+| tcpdump display | UTC time, endpoints, flags/seq/ack/options, packet-local application summaries and ASCII/hex dumps; not byte-for-byte tcpdump text or all its dissectors |
+| Wireshark/TShark filters | Documented field aliases and application shortcuts, not the complete display-filter language |
+| TShark statistics | Listed `stats` reports and `-z` presets, not every TShark tap |
+| nfpcapd/nfdump | Flow conversion/counters and tested endpoint selections; Crepe stores and CQL, not native nfdump files or the full nfdump grammar |
+| Zeek/SiLK | Shared synthetic observation/counter comparisons, not script, schema or complete protocol parity |
+
+For arbitrary visible payload use `crepe read FILE -vvX` or `-A`; for bounded
+reassembled application metadata use `crepe analyze FILE`. An `http` packet
+filter does not select every body-continuation segment of an HTTP connection.
+Do not use it before reassembly if complete context is required.
+
+Live capture currently uses libpcap within the analysis process. Capture access
+can be granted through the OS device/permission setup; using sudo elevates the
+whole process. A separate capture helper is future hardening, not an existing
+isolation boundary. Offline reading and historical analysis need no capture rights.

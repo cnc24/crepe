@@ -179,7 +179,8 @@ pub fn collect(
                                 &value,
                             )?;
                             crate::report!(
-                                "Oh là là! [{}] {} ({peer})",
+                                warning,
+                                "[{}] {} ({peer})",
                                 notice.code,
                                 notice.message
                             );
@@ -189,7 +190,7 @@ pub fn collect(
                         malformed += 1;
                         crate::metrics::MALFORMED
                             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        crate::report!("Sacré bleu! {e} ({peer})");
+                        crate::report!(warning, "{e} ({peer})");
                     }
                 }
             }

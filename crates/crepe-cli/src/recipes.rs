@@ -280,7 +280,10 @@ pub(crate) fn run(profile: Profile, mut args: RecipeArgs) -> Result<()> {
     if args.store.is_some() {
         crate::report!("History saved to {}", store.display());
     } else if summary.observations > 10_000 {
-        crate::report!("Oh là là! Use --store PATH to retain and query all observations.");
+        crate::report!(
+            warning,
+            "Use --store PATH to retain and query all observations."
+        );
     }
     if forensic {
         report_case(&store);

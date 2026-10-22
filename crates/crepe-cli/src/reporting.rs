@@ -15,23 +15,21 @@ pub(crate) fn apply_flair(flair: bool) {
 pub(crate) fn flair_enabled() -> bool {
     !SERIOUS.load(Ordering::Relaxed) && !JSON.load(Ordering::Relaxed)
 }
-pub(crate) fn emit(args: std::fmt::Arguments<'_>) {
+pub(crate) fn emit(level: &str, neutral: bool, args: std::fmt::Arguments<'_>) {
     let original = args.to_string();
     let mut message = original.as_str();
-    let mut severity = "info";
-    for (prefix, level) in [
-        ("Sacré bleu! ", "error"),
-        ("Zut alors! ", "warning"),
-        ("Oh là là! ", "warning"),
-        ("Mon dieu! ", "error"),
-        ("Quelle catastrophe! ", "error"),
-        ("Voilà! ", "info"),
-        ("Magnifique! ", "info"),
-        ("Bon appétit! ", "info"),
+    for prefix in [
+        "Sacré bleu! ",
+        "Zut alors! ",
+        "Oh là là! ",
+        "Mon dieu! ",
+        "Quelle catastrophe! ",
+        "Voilà! ",
+        "Magnifique! ",
+        "Bon appétit! ",
     ] {
         if let Some(rest) = message.strip_prefix(prefix) {
             message = rest;
-            severity = level;
             break;
         }
     }
@@ -46,9 +44,9 @@ pub(crate) fn emit(args: std::fmt::Arguments<'_>) {
         };
         eprintln!(
             "{}",
-            serde_json::json!({"severity":severity,"code":code,"message":detail})
+            serde_json::json!({"severity":level,"code":code,"message":detail})
         );
-    } else if SERIOUS.load(Ordering::Relaxed) {
+    } else if neutral || SERIOUS.load(Ordering::Relaxed) {
         eprintln!("{message}");
     } else {
         eprintln!("{original}");
@@ -56,5 +54,8 @@ pub(crate) fn emit(args: std::fmt::Arguments<'_>) {
 }
 #[macro_export]
 macro_rules! report {
-    ($($arg:tt)*) => { $crate::reporting::emit(format_args!($($arg)*)) };
+    (error, $($arg:tt)*) => { $crate::reporting::emit("error", true, format_args!($($arg)*)) };
+    (usage, $($arg:tt)*) => { $crate::reporting::emit("error", false, format_args!($($arg)*)) };
+    (warning, $($arg:tt)*) => { $crate::reporting::emit("warning", true, format_args!($($arg)*)) };
+    ($($arg:tt)*) => { $crate::reporting::emit("info", false, format_args!($($arg)*)) };
 }

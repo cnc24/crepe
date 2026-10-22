@@ -71,7 +71,7 @@ fn main() -> ExitCode {
                 let _ = e.print();
                 return ExitCode::SUCCESS;
             }
-            crate::report!("Zut alors! [CREPE-CLI-001] {e}");
+            crate::report!(usage, "Zut alors! [CREPE-CLI-001] {e}");
             return ExitCode::from(2);
         }
     };
@@ -79,7 +79,7 @@ fn main() -> ExitCode {
     let _metrics = match cli.metrics.map(metrics::Server::start).transpose() {
         Ok(server) => server,
         Err(error) => {
-            crate::report!("Sacré bleu! {error}");
+            crate::report!(error, "{error}");
             return ExitCode::from(1);
         }
     };
@@ -87,7 +87,11 @@ fn main() -> ExitCode {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) if e.code == "CREPE-IO-PIPE" => ExitCode::SUCCESS,
         Err(e) => {
-            crate::report!("Sacré bleu! {e}");
+            if matches!(e.code, "CREPE-CQL-001" | "CREPE-CLI-001" | "CREPE-CPL-001") {
+                crate::report!(usage, "Sacré bleu! {e}");
+            } else {
+                crate::report!(error, "{e}");
+            }
             ExitCode::from(if matches!(e.code, "CREPE-CQL-001" | "CREPE-CLI-001") {
                 2
             } else {

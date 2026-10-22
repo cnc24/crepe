@@ -110,7 +110,10 @@ fn packets(
     let output_result = out.flush();
     let export_result = export.map(Export::finish).transpose();
     if malformed > 0 {
-        crate::report!("Oh là là! [CREPE-PKT-001] Skipped {malformed} malformed packet payloads.");
+        crate::report!(
+            warning,
+            "[CREPE-PKT-001] Skipped {malformed} malformed packet payloads."
+        );
     }
     result?;
     output_result?;
@@ -312,7 +315,8 @@ pub(crate) fn run(cli: Cli) -> Result<()> {
                 != 0
             {
                 crate::report!(
-                    "Oh là là! IP datagrams: {incomplete} incomplete, {} expired, {} evicted.",
+                    warning,
+                    "IP datagrams: {incomplete} incomplete, {} expired, {} evicted.",
                     analyzer.fragments.stats.expired,
                     analyzer.fragments.stats.evicted
                 );

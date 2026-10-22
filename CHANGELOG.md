@@ -1,8 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.5.1 — 2026-10-22
 
 - Add 19 optional French command aliases, displayed alongside canonical commands in help and documented in the operating guide. Existing recipe aliases and command behavior remain unchanged.
+- Give typed CQL predicate failures bounded source excerpts, line/column and byte positions; invalid ports include the expected range and a corrected example.
+- Set diagnostic severity explicitly; CLI errors are errors in JSON, and runtime failures, malformed-input warnings and capture-loss summaries are neutral.
+- Replace stale prototype roadmaps with current scope and document specialist-tool compatibility boundaries.
 
 ## 1.5.0 — 2026-10-22
 

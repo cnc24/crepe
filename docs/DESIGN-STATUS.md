@@ -2,7 +2,7 @@
 
 The user-supplied [original design](DESIGN-ORIGINAL.md) is the planning source.
 The [English manual](OPERATIONS.md) describes executable commands and precise
-limits. Milestone/release acceptance is tracked in [RELEASE-1.1.md](RELEASE-1.1.md).
+limits. Current architecture acceptance is tracked in [TARGET-ACCEPTANCE.md](TARGET-ACCEPTANCE.md).
 
 Version 1.1.0 was the initial source-available publication candidate. Current
 target acceptance is tracked below; earlier private prototype history is not included.

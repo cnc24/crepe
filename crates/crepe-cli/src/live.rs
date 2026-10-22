@@ -58,7 +58,7 @@ pub fn capture_events(
     if bpf.is_none() && cap.linktype() == 1 {
         if let Some(hint) = automatic {
             if let Err(error) = cap.set_filter(hint) {
-                crate::report!("Oh là là! {error}; continuing without automatic prefilter.");
+                crate::report!(warning, "{error}; continuing without automatic prefilter.");
             }
         }
     }
@@ -96,7 +96,18 @@ pub fn capture_events(
         }
     }
     let stats = cap.statistics()?;
-    crate::report!("Magnifique! {sequence} records read; libpcap received={}, dropped={}, interface_dropped={}.", stats.received, stats.dropped, stats.interface_dropped);
+    crate::reporting::emit(
+        if stats.dropped > 0 || stats.interface_dropped > 0 {
+            "warning"
+        } else {
+            "info"
+        },
+        true,
+        format_args!(
+            "{sequence} records read; libpcap received={}, dropped={}, interface_dropped={}.",
+            stats.received, stats.dropped, stats.interface_dropped
+        ),
+    );
     Ok(())
 }
 

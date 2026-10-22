@@ -106,7 +106,51 @@ enum Token {
     Word(String),
     Symbol(String),
 }
-fn lex(s: &str) -> Result<Vec<Token>> {
+struct Spanned {
+    token: Token,
+    start: usize,
+    end: usize,
+}
+fn diagnostic(source: &str, start: usize, end: usize, error: Error) -> Error {
+    let line_start = source[..start].rfind('\n').map_or(0, |n| n + 1);
+    let line_end = source[start..]
+        .find('\n')
+        .map_or(source.len(), |n| start + n);
+    let column = source[line_start..start].chars().count();
+    let line = source[..start].bytes().filter(|b| *b == b'\n').count() + 1;
+    // Bound diagnostics and escape terminal controls without changing byte locations.
+    let skip = column.saturating_sub(60);
+    let shown: String = source[line_start..line_end]
+        .chars()
+        .skip(skip)
+        .take(160)
+        .flat_map(|c| {
+            if c.is_control() {
+                c.escape_default().collect::<Vec<_>>()
+            } else {
+                vec![c]
+            }
+        })
+        .collect();
+    let prefix: String = source[line_start..start]
+        .chars()
+        .skip(skip)
+        .flat_map(|c| {
+            if c.is_control() {
+                c.escape_default().collect::<Vec<_>>()
+            } else {
+                vec![c]
+            }
+        })
+        .collect();
+    let width = source[start..end.min(line_end)]
+        .chars()
+        .count()
+        .clamp(1, 60);
+    err(format!("{}\nAt line {line}, column {} (bytes {start}..{end}):\n{shown}\n{}{}\nUse crepe read -h for packet filters or crepe query -h for historical pipelines.",
+        error.message, column + 1, " ".repeat(prefix.chars().count()), "^".repeat(width)))
+}
+fn lex(s: &str) -> Result<Vec<Spanned>> {
     if s.len() > 16384 {
         return Err(err("query length limit"));
     }
@@ -127,7 +171,14 @@ fn lex(s: &str) -> Result<Vec<Token>> {
                 }
                 escaped = c == '\\' && !escaped;
             }
-            let end = end.ok_or_else(|| err(format!("unterminated string at byte {start}")))?;
+            let end = end.ok_or_else(|| {
+                diagnostic(
+                    s,
+                    start,
+                    s.len(),
+                    err("unterminated string; close the double quote"),
+                )
+            })?;
             Token::Word(s[start..end].into())
         } else if "()[],!<>=&|".contains(c) {
             let mut op = c.to_string();
@@ -148,7 +199,12 @@ fn lex(s: &str) -> Result<Vec<Token>> {
             }
             Token::Word(word)
         };
-        out.push(token);
+        let end = it.peek().map_or(s.len(), |(i, _)| *i);
+        out.push(Spanned {
+            token,
+            start: at,
+            end,
+        });
         if out.len() > 1024 {
             return Err(err("query token limit"));
         }
@@ -156,15 +212,17 @@ fn lex(s: &str) -> Result<Vec<Token>> {
     Ok(out)
 }
 struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<Spanned>,
     pos: usize,
+    error_pos: usize,
 }
 impl Parser {
     fn take(&mut self, s: &str) -> bool {
+        self.error_pos = self.pos;
         if self
             .tokens
             .get(self.pos)
-            .is_some_and(|t| matches!(t,Token::Symbol(v)|Token::Word(v) if v==s))
+            .is_some_and(|t| matches!(&t.token,Token::Symbol(v)|Token::Word(v) if v==s))
         {
             self.pos += 1;
             true
@@ -173,7 +231,8 @@ impl Parser {
         }
     }
     fn word(&mut self) -> Result<String> {
-        match self.tokens.get(self.pos) {
+        self.error_pos = self.pos;
+        match self.tokens.get(self.pos).map(|t| &t.token) {
             Some(Token::Word(v)) => {
                 self.pos += 1;
                 Ok(v.clone())
@@ -212,7 +271,8 @@ impl Parser {
             }
             return Ok(e);
         }
-        let f = field(&self.word()?)?;
+        let field_name = self.word()?;
+        let f = field(&field_name)?;
         if self.take("in") {
             if f.kind == Type::Ip {
                 return Ok(Expr::Network(
@@ -231,7 +291,7 @@ impl Parser {
                 ports.push(
                     self.word()?
                         .parse()
-                        .map_err(|_| err("port must be 0..65535"))?,
+                        .map_err(|_| err(format!("{field_name} expects an integer port from 0 to 65535. Try: {field_name} in [80, 443]")))?,
                 );
                 if self.take("]") {
                     break;
@@ -311,9 +371,13 @@ impl Parser {
                     .parse::<i128>()
                     .ok()
                     .and_then(|n| n.checked_mul(multiplier))
-                    .ok_or_else(|| err("expected bounded integer"))?;
+                    .ok_or_else(|| err(if f.kind == Type::Port {
+                        format!("{field_name} expects an unquoted integer port from 0 to 65535. Try: {field_name} == 443")
+                    } else { format!("{field_name} expects a bounded integer. Try: {field_name} > 1000") }))?;
                 if f.kind == Type::Port && !(0..=65535).contains(&n) {
-                    return Err(err("port must be 0..65535"));
+                    return Err(err(format!(
+                        "{field_name} expects a port from 0 to 65535. Try: {field_name} == 443"
+                    )));
                 }
                 Literal::Number(n)
             }
@@ -345,10 +409,23 @@ pub fn parse(s: &str) -> Result<Expr> {
     let mut p = Parser {
         tokens: lex(s)?,
         pos: 0,
+        error_pos: 0,
     };
-    let e = p.or(0)?;
+    let e = p.or(0).map_err(|e| {
+        let (start, end) = p
+            .tokens
+            .get(p.error_pos)
+            .map_or((s.len(), s.len()), |t| (t.start, t.end));
+        diagnostic(s, start, end, e)
+    })?;
     if p.pos != p.tokens.len() {
-        return Err(err("unexpected filter tokens"));
+        let t = &p.tokens[p.pos];
+        return Err(diagnostic(
+            s,
+            t.start,
+            t.end,
+            err("unexpected filter tokens; join predicates with && or ||"),
+        ));
     }
     Ok(e)
 }
@@ -567,5 +644,35 @@ mod tests {
         ] {
             assert!(parse(q).is_err(), "{q}");
         }
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::*;
+    #[test]
+    fn diagnostics_locate_literals_operators_and_eof() {
+        let bad = parse("dst.port == \"hallo\"").unwrap_err();
+        assert!(bad.message.contains("column 13 (bytes 12..19)"));
+        assert!(bad.message.contains("0 to 65535"));
+        assert!(bad.message.contains("Try: dst.port == 443"));
+        for (query, location) in [
+            ("dst.port == 70000", "bytes 12..17"),
+            ("dst.port = 80", "bytes 9..10"),
+            ("dst.port ==", "bytes 11..11"),
+            ("(dst.port == 80", "bytes 15..15"),
+            ("sensor == \"é\" &&\n dst.port == nope", "line 2, column 14"),
+        ] {
+            let error = parse(query).unwrap_err();
+            assert!(
+                error.message.contains(location),
+                "{query}: {}",
+                error.message
+            );
+            assert!(error.message.contains('^'));
+        }
+        let error = parse("sensor == \"\u{1b}[31m").unwrap_err();
+        assert!(!error.message.contains('\u{1b}'));
+        assert!(error.message.contains("close the double quote"));
     }
 }
