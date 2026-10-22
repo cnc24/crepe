@@ -2,8 +2,10 @@
 """Repeatable synthetic offline throughput/RSS baseline and streaming soak."""
 import argparse,json,os,resource,struct,subprocess,tempfile,time
 from pathlib import Path
-from importlib.machinery import SourceFileLoader
-fixture=SourceFileLoader('fixtures',str(Path(__file__).with_name('generate-fixtures.py'))).load_module()
+from importlib.util import module_from_spec, spec_from_file_location
+spec = spec_from_file_location('fixtures', Path(__file__).with_name('generate-fixtures.py'))
+fixture = module_from_spec(spec)
+spec.loader.exec_module(fixture)
 p=argparse.ArgumentParser();p.add_argument('--binary',default='target/release/crepe');p.add_argument('--packets',type=int,default=200000);a=p.parse_args();binary=str(Path(a.binary).resolve())
 with tempfile.TemporaryDirectory(prefix='crepe-benchmark-') as tmp:
     capture=Path(tmp)/'soak.pcap';packet=fixture.frame(4,17,50000,9999,payload=b'baseline')
