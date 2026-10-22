@@ -38,6 +38,9 @@ for capture in ['example.pcap', 'fixtures/example.pcapng', 'fixtures/flows.pcap'
     endpoint_totals = {}
     fields = run(a.tshark, '-n', '-r', capture, '-T', 'fields',
                  '-e', 'ip.src', '-e', 'ipv6.src', '-e', 'ip.dst', '-e', 'ipv6.dst', '-e', 'frame.len')
+    wildcard = stats(capture, 'count *')
+    same((wildcard['matched_packets'], wildcard['matched_bytes']),
+         (len(fields.splitlines()), sum(int(line.split('\t')[-1]) for line in fields.splitlines())))
     for line in fields.splitlines():
         src4, src6, dst4, dst6, size = line.split('\t')
         src, dst = src4 or src6, dst4 or dst6

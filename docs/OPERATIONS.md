@@ -92,7 +92,8 @@ crepe stats traffic.pcap flags --format csv -o flags.csv
 | `"FILTER"` / `"count FILTER"` | Count packets matching read's CQL/selected Wireshark aliases or tcpdump/BPF grammar |
 
 `--filter` (`-f`, alias `--where`) narrows the input before grouping. When a
-positional count filter is also supplied, both filters must match.
+positional count filter is also supplied, both filters must match. The CQL
+wildcard `*` includes non-IP link frames as well as IP packets.
 `--filter-syntax auto|cql|bpf` selects the grammar for these filters. BPF requires
 an official/live-enabled build; canonical CQL works in the portable build.
 The listed `-z` aliases accept no appended filter or interval; use `--filter`.

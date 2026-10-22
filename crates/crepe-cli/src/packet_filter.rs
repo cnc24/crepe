@@ -26,6 +26,9 @@ impl Filter {
         let Some(expression) = expression else {
             return Ok(result);
         };
+        if expression.trim() == "*" && !matches!(syntax, FilterSyntax::Bpf) {
+            return Ok(result);
+        }
         if matches!(syntax, FilterSyntax::Auto) {
             let name = expression.trim().to_ascii_lowercase();
             if ["http", "dns", "tls", "ssh"].contains(&name.as_str()) {

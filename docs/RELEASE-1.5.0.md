@@ -30,8 +30,8 @@ Local macOS ARM64 checks:
 - `cargo test --workspace --locked`: 140 tests.
 - `cargo build --release --all-features --locked`
 - Architecture and locked third-party license checks.
-- 83 real TShark/tcpdump checks: count/byte parity, hierarchy nodes, source and
-  endpoint rankings, omitted groups, CQL/BPF counts and `-c` packet export.
+- 87 real TShark/tcpdump checks: count/byte parity, hierarchy nodes, source and
+  endpoint rankings, omitted groups, CQL/BPF and wildcard counts, and `-c` packet export.
 - 50 existing packet-filter/HTTP compatibility checks, including the Wireshark
   HTTP sample, plus the live loopback capture/replay test now exercising `-c`.
 - Regression cases cover empty PCAP, malformed packets, fatal container errors,

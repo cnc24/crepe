@@ -2,6 +2,7 @@
 
 ## 1.5.0 — 2026-10-22
 
+- Treat the CQL wildcard `*` as all packets, including non-IP link frames.
 - Add `-c` as the matching-packet limit for read/capture, preserving `--limit` and the separate live `--count` behavior.
 - Add streaming `stats`: protocol hierarchy, protocols, top talkers, endpoints, IP conversations, destination ports and TCP flag/protocol/filter counts.
 - Support named presets, selected TShark `-z` aliases and existing CQL/BPF packet filters. Bound exact group memory and expose skipped packets/omitted ranking rows.

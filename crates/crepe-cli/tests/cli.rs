@@ -1880,6 +1880,14 @@ fn count_short_option_limits_matching_packets_and_export() {
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
     assert_eq!(rows.len(), 5);
+    let all = cli()
+        .arg("read")
+        .arg(fixture("fixtures/packet-display.pcap"))
+        .args(["*", "--filter-syntax", "cql", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(all.status.success());
+    assert_eq!(String::from_utf8(all.stdout).unwrap().lines().count(), 6);
     assert_eq!(rows.last().unwrap()["header"]["sequence"], 7);
     let replay = cli()
         .arg("read")
@@ -1902,6 +1910,17 @@ fn count_short_option_limits_matching_packets_and_export() {
 fn stats_hierarchy_flags_rankings_and_filter_counts() {
     let r = statistics("fixtures/packet-display.pcap", &["hierarchy"]);
     assert_eq!(r["matched_packets"], 6);
+    assert_eq!(
+        statistics("fixtures/packet-display.pcap", &["count *"])["matched_packets"],
+        6
+    );
+    assert_eq!(
+        statistics(
+            "fixtures/packet-display.pcap",
+            &["summary", "--filter", "*"]
+        )["matched_packets"],
+        6
+    );
     assert_eq!(stat_count(&r, "ethernet"), 6);
     assert_eq!(stat_count(&r, "ethernet > arp"), 1);
     assert_eq!(stat_count(&r, "ethernet > ethertype-0x88b5"), 1);
