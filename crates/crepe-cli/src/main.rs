@@ -15,6 +15,7 @@ mod packet_display;
 mod packet_filter;
 mod recipes;
 mod reporting;
+mod stats;
 mod update;
 mod windows;
 use args::{Cli, Format};

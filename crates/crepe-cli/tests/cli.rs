@@ -1832,3 +1832,228 @@ fn live_raw_rotation_and_related_timeline_use_verified_references() {
     assert!(!proof.status.success());
     assert!(String::from_utf8_lossy(&proof.stderr).contains("hash"));
 }
+
+fn statistics(file: &str, args: &[&str]) -> serde_json::Value {
+    let out = cli()
+        .arg("stats")
+        .arg(fixture(file))
+        .args(args)
+        .args(["--format", "json"])
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    serde_json::from_slice(&out.stdout).unwrap()
+}
+fn stat_count(report: &serde_json::Value, name: &str) -> u64 {
+    report["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == name)
+        .unwrap()["packets"]
+        .as_u64()
+        .unwrap()
+}
+#[test]
+fn count_short_option_limits_matching_packets_and_export() {
+    let dir = tempfile::tempdir().unwrap();
+    let saved = dir.path().join("five.pcap");
+    let out = cli()
+        .arg("read")
+        .arg(fixture("fixtures/flows.pcap"))
+        .args(["tcp", "-c", "5", "--format", "json", "-w"])
+        .arg(&saved)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let rows: Vec<serde_json::Value> = String::from_utf8(out.stdout)
+        .unwrap()
+        .lines()
+        .map(|l| serde_json::from_str(l).unwrap())
+        .collect();
+    assert_eq!(rows.len(), 5);
+    assert_eq!(rows.last().unwrap()["header"]["sequence"], 7);
+    let replay = cli()
+        .arg("read")
+        .arg(saved)
+        .args(["--format", "json"])
+        .output()
+        .unwrap();
+    assert!(replay.status.success());
+    assert_eq!(String::from_utf8(replay.stdout).unwrap().lines().count(), 5);
+    let link = cli()
+        .arg("read")
+        .arg(fixture("fixtures/packet-display.pcap"))
+        .args(["arp", "-c", "1", "--format", "json"])
+        .output()
+        .unwrap();
+    assert!(link.status.success());
+    assert_eq!(String::from_utf8(link.stdout).unwrap().lines().count(), 1);
+}
+#[test]
+fn stats_hierarchy_flags_rankings_and_filter_counts() {
+    let r = statistics("fixtures/packet-display.pcap", &["hierarchy"]);
+    assert_eq!(r["matched_packets"], 6);
+    assert_eq!(stat_count(&r, "ethernet"), 6);
+    assert_eq!(stat_count(&r, "ethernet > arp"), 1);
+    assert_eq!(stat_count(&r, "ethernet > ethertype-0x88b5"), 1);
+    assert_eq!(stat_count(&r, "ethernet > vlan > lldp"), 1);
+    assert_eq!(stat_count(&r, "ethernet > ipv4 > tcp > http"), 2);
+    assert_eq!(
+        r,
+        statistics("fixtures/packet-display.pcap", &["-z", "io,phs"])
+            .as_object()
+            .map(|m| {
+                let mut m = m.clone();
+                m.insert("report".into(), "hierarchy".into());
+                serde_json::Value::Object(m)
+            })
+            .unwrap()
+    );
+    let flags = statistics("fixtures/flows.pcap", &["flags"]);
+    for (name, n) in [
+        ("syn", 2),
+        ("syn-only", 1),
+        ("syn-ack", 1),
+        ("fin", 2),
+        ("rst", 1),
+        ("ack", 4),
+    ] {
+        assert_eq!(stat_count(&flags, name), n);
+    }
+    let r = statistics("fixtures/flows.pcap", &["top-talkers", "--top", "1"]);
+    assert_eq!(r["rows_omitted"], 1);
+    assert_eq!(r["rows"][0]["packets"], 5);
+    assert_eq!(r["matched_packets"], 8);
+    assert_eq!(
+        statistics(
+            "fixtures/flows.pcap",
+            &["count syn", "--filter", "dst.port == 443"]
+        )["matched_packets"],
+        1
+    );
+    assert_eq!(
+        statistics("fixtures/flows.pcap", &["dst.port == 443"])["matched_packets"],
+        4
+    );
+    assert_eq!(
+        statistics("fixtures/flows.pcap", &["summary", "-c", "5"])["records_read"],
+        5
+    );
+    assert_eq!(
+        statistics("fixtures/example.pcapng", &["summary"])["matched_packets"],
+        6
+    );
+    assert_eq!(
+        statistics("fixtures/example.pcapng", &["-z", "endpoints,ip"])["matched_packets"],
+        3
+    );
+    assert_eq!(
+        statistics("fixtures/example.pcapng", &["-z", "conv,ipv6"])["matched_packets"],
+        3
+    );
+    let empty = statistics("fixtures/flows.pcap", &["arp"]);
+    assert_eq!(empty["matched_packets"], 0);
+    assert_eq!(empty["rows"][0]["percent_packets"], 0.0);
+}
+#[test]
+fn stats_report_formats_limits_and_help() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("report.md");
+    let result = cli()
+        .arg("stats")
+        .arg(fixture("fixtures/flows.pcap"))
+        .args(["flags", "--format", "markdown", "-o"])
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    assert!(result.stdout.is_empty());
+    let original = std::fs::read(&path).unwrap();
+    assert!(String::from_utf8_lossy(&original).contains("| syn | 2 |"));
+    let overwrite = cli()
+        .arg("stats")
+        .arg(fixture("fixtures/flows.pcap"))
+        .args(["-o"])
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(!overwrite.status.success());
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    let bounded = cli()
+        .arg("stats")
+        .arg(fixture("fixtures/flows.pcap"))
+        .args(["top-talkers", "--max-groups", "1"])
+        .output()
+        .unwrap();
+    assert!(!bounded.status.success());
+    assert!(bounded.stdout.is_empty());
+    let csv = cli()
+        .arg("stats")
+        .arg(fixture("fixtures/flows.pcap"))
+        .args(["syn", "--format", "csv"])
+        .output()
+        .unwrap();
+    assert!(csv.status.success());
+    assert!(String::from_utf8_lossy(&csv.stdout).contains("\"syn\",2,"));
+    for cmd in ["read", "stats"] {
+        let h = cli().args([cmd, "-h"]).output().unwrap();
+        let h = String::from_utf8(h.stdout).unwrap();
+        assert!(h.contains("Selection and limits"));
+        assert!(h.contains("Display and export"));
+        assert!(h.contains("Examples:"));
+    }
+    let root = cli().arg("-h").output().unwrap();
+    let text = String::from_utf8(root.stdout).unwrap();
+    assert!(text.contains("Traffic analysis:"));
+    assert!(text.contains("Auxiliary commands:"));
+    assert!(text.contains("Help and version:"));
+}
+
+#[test]
+fn stats_empty_malformed_and_container_errors_are_explicit() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("input.pcap");
+    let original = std::fs::read(fixture("example.pcap")).unwrap();
+    std::fs::write(&file, &original[..24]).unwrap();
+    let run = |options: &[&str]| {
+        cli()
+            .arg("stats")
+            .arg(&file)
+            .args(options)
+            .args(["--format", "json"])
+            .output()
+            .unwrap()
+    };
+    let out = run(&[]);
+    assert!(out.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
+    assert_eq!(report["matched_packets"], 0);
+    let mut bytes = original[..24].to_vec();
+    for value in [1700000000_u32, 0, 2, 2] {
+        bytes.extend_from_slice(&value.to_le_bytes());
+    }
+    bytes.extend_from_slice(&[0, 0]);
+    bytes.extend_from_slice(&original[24..]);
+    std::fs::write(&file, &bytes).unwrap();
+    assert!(!run(&[]).status.success());
+    let tolerant = run(&["--tolerant"]);
+    assert!(tolerant.status.success());
+    let report: serde_json::Value = serde_json::from_slice(&tolerant.stdout).unwrap();
+    assert_eq!(report["malformed_skipped"], 1);
+    assert_eq!(report["matched_packets"], 6);
+    assert_eq!(report["records_read"], 7);
+    bytes.pop();
+    std::fs::write(&file, &bytes).unwrap();
+    let broken = run(&["--tolerant"]);
+    assert!(!broken.status.success());
+    assert!(broken.stdout.is_empty());
+}

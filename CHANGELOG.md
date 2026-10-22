@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.5.0 — 2026-10-22
+
+- Add `-c` as the matching-packet limit for read/capture, preserving `--limit` and the separate live `--count` behavior.
+- Add streaming `stats`: protocol hierarchy, protocols, top talkers, endpoints, IP conversations, destination ports and TCP flag/protocol/filter counts.
+- Support named presets, selected TShark `-z` aliases and existing CQL/BPF packet filters. Bound exact group memory and expose skipped packets/omitted ranking rows.
+- Export terminal, Markdown, CSV and JSON reports; create report files atomically without overwriting.
+- Group root help into traffic analysis, investigation/storage and auxiliary commands; expand read/stats syntax, limits, flags and examples.
+- Add statistical regression tests and real tcpdump/TShark comparison checks.
+
 ## 1.4.0 — 2026-10-09
 
 - Complete the target v1 investigation path with bounded reassembly packet provenance, hash-verified multi-packet export and replay tests.

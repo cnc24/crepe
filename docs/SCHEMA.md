@@ -196,3 +196,19 @@ Evidence always hashes the referenced raw file before and after reading it.
 
 Additional error families: `CREPE-CPL-001` for policy syntax/action limits,
 `CREPE-RAW-001` for raw retention/manifest errors. Existing error families remain.
+
+## Capture statistics (1.5.0)
+
+`stats --format json` emits one schema-1 envelope, not JSON Lines. Fields:
+`input_file`, `report`, optional `filter`, `records_read`, `matched_packets`,
+`matched_bytes`, `malformed_skipped`, `groups_total`, `rows_omitted`, `byte_basis`,
+`classification`, and `rows`. Rows contain `name`, `packets`, `bytes`,
+`percent_packets` (zero for an empty selection). Counts are unsigned 64-bit;
+overflow is an error. Percentages use all matched packets as denominator.
+Nested hierarchy nodes, flag rows and endpoint rows can overlap. The report name
+also identifies a positional filter or a family-specific TShark report alias.
+
+Ranking rows sort descending by bytes/packets, with names breaking ties;
+non-ranking rows sort by name and are not shortened by `--top`. Exact group
+cardinality is bounded and overflow is an explicit `CREPE-STATS-001` failure.
+Packet/application/flow/historical schemas do not change in this release.

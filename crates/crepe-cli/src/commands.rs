@@ -119,6 +119,7 @@ fn packets(
 }
 pub(crate) fn run(cli: Cli) -> Result<()> {
     match cli.command {
+        Command::Stats(args) => crate::stats::run(args),
         Command::Plan(args) => {
             let mut config = crate::history::config(args.config.as_deref())?;
             if !args.profiles.is_empty() {

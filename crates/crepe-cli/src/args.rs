@@ -44,8 +44,8 @@ pub(crate) struct PacketArgs {
     /// More packet metadata (-v); application headers (-vv). Combines with -X/-XX.
     #[arg(short = 'v', long, action = clap::ArgAction::Count)]
     pub verbose: u8,
-    /// Stop after this many matching packets or link frames.
-    #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
+    /// Stop after this many matching packets or link frames (not text lines).
+    #[arg(short = 'c', long, value_parser = clap::value_parser!(u64).range(1..))]
     pub limit: Option<u64>,
     /// Write matching packet bytes to a new PCAP (never overwrites).
     #[arg(short, long)]
@@ -99,6 +99,8 @@ pub(crate) struct FlowArgs {
 }
 #[derive(Subcommand)]
 pub(crate) enum Command {
+    /// Summarize capture traffic: hierarchy, top talkers, protocols and packet counts.
+    Stats(crate::stats::Args),
     /// Resolve profiles, module dependencies and resource settings without capturing traffic.
     Plan(PlanArgs),
     /// Apply raw-only retention to manifest-owned captures; historical observations remain intact.

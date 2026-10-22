@@ -16,9 +16,10 @@ describe the same workflow.
 
 | Command | Alias | What it does / common options |
 | --- | --- | --- |
-| `read FILE [FILTER]` | — | Packet/link summaries; `-v`/`-vv`, `-A`, `-X`/`-XX` (combinable as `-vvX`), `--format table\|json\|csv`, `--limit N`, `--write FILE`, `--tolerant`, `--filter-syntax auto\|cql\|bpf` |
+| `read FILE [FILTER]` | — | Packet/link summaries; `-v`/`-vv`, `-A`, `-X`/`-XX` (combinable as `-vvX`), `--format table\|json\|csv`, `-c N`/`--limit N`, `--write FILE`, `--tolerant`, `--filter-syntax auto\|cql\|bpf` |
 | `capture -i IFACE [FILTER]` | `sucre` | Live packet summaries; read options plus `--duration SECONDS`, `--count N`, `--bpf FILTER`, `--promisc` |
 | `interfaces` | `interface` | List available capture interfaces |
+| `stats FILE [REPORT_OR_FILTER]` | — | Hierarchy, top talkers, protocols, packet/flag counts; `--filter`, `--top`, `--sort`, `-c`, `--format table\|markdown\|csv\|json`, `-o NEW_FILE` |
 | `flows FILE_OR_STORE [FILTER_OR_QUERY]` | — | TCP/UDP flows; `--store DIR`, `--query CQL`, `--sort packets\|bytes\|flows`, `--group FIELDS`, `--count`, `--limit N`, `--details` |
 | `analyze FILE` | — | Reassembly and application observations; `--format table\|json\|csv`, `--dns-port`, `--max-streams`, `--max-buffer-bytes`, `--stream-idle` |
 | `inspect [FILE]` | `chocolate` | Deep-analysis recipe; without a source, opens the interactive menu |
@@ -53,6 +54,90 @@ changes diagnostics on stderr, `--metrics IP:PORT` enables the metrics endpoint,
 `--version` shows the installed version. `--format json` controls data on stdout
 and is independent of `--log-format`. Formats are not interchangeable schemas:
 packet records, flow records and historical observations have different fields.
+
+## Capture statistics and report tables (1.5.0)
+
+Use `crepe stats FILE [REPORT_OR_FILTER] [OPTIONS]` directly on PCAP/PCAPNG;
+no import or historical store is required. These are packet statistics, not
+reassembled application-event or connection-instance counts.
+
+```sh
+crepe read traffic.pcap 'dst port 443' -c 5
+crepe stats traffic.pcap
+crepe stats traffic.pcap hierarchy
+crepe stats traffic.pcap -z io,phs
+crepe stats traffic.pcap top-talkers --top 10 --sort bytes
+crepe stats traffic.pcap endpoints --sort packets
+crepe stats traffic.pcap ports --filter 'ip.src == 192.0.2.10'
+crepe stats traffic.pcap arp
+crepe stats traffic.pcap syn
+crepe stats traffic.pcap 'count syn' --where 'dst.port == 443'
+crepe stats traffic.pcap 'dst port 443'
+crepe stats traffic.pcap 'dst.port == 443'
+crepe stats traffic.pcap protocols --format markdown -o report.md
+crepe stats traffic.pcap flags --format csv -o flags.csv
+```
+
+| Report | Meaning / alternative syntax |
+| --- | --- |
+| `summary` | Selected totals and protocol counts; default; `-z io,stat,0` |
+| `hierarchy` | Link → VLAN → IP → transport → detected application; `protocol-hierarchy`, `"protocol hierarchy"`, `-z io,phs` |
+| `protocols` | Counts by protocol layer, with overlapping contributions |
+| `top-talkers` | Source IP ranking (sent packets/bytes); `talkers`, `"top talkers"` |
+| `endpoints` | Both IP endpoints, once per packet/IP (loopback not double-counted); `-z endpoints,ip` / `-z endpoints,ipv6` selects IPv4 / IPv6 |
+| `conversations` | Unordered IP pairs, aggregated across ports/protocols; `-z conv,ip` / `-z conv,ipv6` selects IPv4 / IPv6; use `flows` for separate connection instances |
+| `ports` | Destination transport protocol/port ranking |
+| `flags` | SYN, SYN-only, SYN-ACK, ACK, FIN, RST, PSH, URG, ECE and CWR; `tcp-flags` |
+| `arp`, `syn`, `fin`, `rst`, etc. | Count a protocol filter or named TCP flag; `"count syn"` also works |
+| `"FILTER"` / `"count FILTER"` | Count packets matching read's CQL/selected Wireshark aliases or tcpdump/BPF grammar |
+
+`--filter` (`-f`, alias `--where`) narrows the input before grouping. When a
+positional count filter is also supplied, both filters must match.
+`--filter-syntax auto|cql|bpf` selects the grammar for these filters. BPF requires
+an official/live-enabled build; canonical CQL works in the portable build.
+The listed `-z` aliases accept no appended filter or interval; use `--filter`.
+Other TShark statistics and arbitrary display-filter fields are not emulated.
+
+**Counting rules:** `-c N`/`--limit N` stops after N matching packets, not N text
+lines. `read -vvX -c 5` may print many lines for five packets. The existing live
+`capture --count` still counts delivered records before the userspace filter;
+`capture -c` counts matches. `stats --top N` applies only to rankings and limits
+output rows after exact aggregation. `--sort packets|bytes` defaults to bytes;
+ties sort by name. The report states how many ranking groups were omitted.
+
+Bytes are original frame lengths (including link headers), not captured payload
+lengths. Percentage denominators include all selected records, including non-IP
+traffic; an IP-only ranking may therefore cover less than 100%. Protocol layers,
+TCP flags and endpoint rows overlap and must not be summed as independent totals.
+`syn` includes SYN-ACK; `syn-only` requires SYN set and ACK clear. Flag counters
+need a decoded TCP header; non-initial/IP-fragment records do not fabricate flags.
+Application classification is packet-local: an incomplete HTTP/TLS header can
+remain classified as TCP. Use `analyze` for reconstructed application events.
+
+`--max-groups` limits exact distinct groups (default/maximum 65,536). Overflow
+fails with `CREPE-STATS-001`, before publishing a report; it does not silently
+approximate top-N. Narrow the filter when needed. Malformed packets normally
+fail; `--tolerant` skips them and reports their count. Container/I/O errors remain
+fatal. Empty selection produces zero totals, with zero rows except explicit
+count/flag reports. JSON always includes totals and omissions, even with no rows.
+
+**Report output:** table is readable in Terminal, Markdown gives an aligned
+report table, CSV is suitable for spreadsheets, and JSON includes the full
+metadata envelope. CSV repeats totals/skipped/omission counts on populated rows;
+an empty CSV has only its header, so use JSON for empty-report metadata. `-o`
+creates a new report atomically after successful analysis; existing files are
+never overwritten. Shell redirection is also supported and follows shell rules.
+
+The grouping of root help separates traffic analysis, investigation/storage and
+auxiliary commands. `read -h` and `stats -h` separate selection/limits from
+presentation/export and include executable examples.
+
+Compatibility was checked against the upstream
+[TShark manual](https://www.wireshark.org/docs/man-pages/tshark) and
+[tcpdump manual source](https://github.com/the-tcpdump-group/tcpdump/blob/master/tcpdump.1.in).
+`scripts/compare-stats.py` compares actual counts, original byte totals,
+hierarchy nodes and `-c` selections on synthetic PCAP/PCAPNG fixtures. This is
+subset verification, not universal equivalence with either tool.
 
 ### Packet filters: tcpdump/BPF or CQL
 

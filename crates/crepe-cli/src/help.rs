@@ -3,22 +3,71 @@ use std::fmt::Write;
 pub const LOGO: &str = include_str!("../../../assets/crepe-logo.txt");
 /// Derive the alias table from Clap so help and executable command names agree.
 pub fn root(command: &Command) -> String {
-    let mut table = String::from("Commands:\n  COMMAND      ALIAS                 PURPOSE\n");
-    for sub in command.get_subcommands().filter(|c| !c.is_hide_set()) {
-        let aliases = sub
-            .get_all_aliases()
-            .filter(|name| *name != "choclate")
-            .collect::<Vec<_>>()
-            .join(", ");
+    let mut table = String::new();
+    for (heading, names) in [
+        (
+            "Traffic analysis",
+            &["read", "analyze", "stats", "flows", "capture", "collect"][..],
+        ),
+        (
+            "Investigation and storage",
+            &[
+                "inspect",
+                "forensics",
+                "full",
+                "run",
+                "ingest",
+                "query",
+                "trace",
+                "timeline",
+                "correlate",
+                "evidence",
+                "compact",
+                "raw-prune",
+            ][..],
+        ),
+        (
+            "Auxiliary commands",
+            &[
+                "interfaces",
+                "profiles",
+                "plan",
+                "config",
+                "daemon",
+                "update",
+                "licenses",
+                "logo",
+            ][..],
+        ),
+    ] {
         let _ = writeln!(
             table,
-            "  {:12} {:21} {}",
-            sub.get_name(),
-            if aliases.is_empty() { "-" } else { &aliases },
-            sub.get_about().map(ToString::to_string).unwrap_or_default()
+            "{heading}:\n  COMMAND      ALIAS                 PURPOSE"
         );
+        for name in names {
+            let Some(sub) = command
+                .get_subcommands()
+                .find(|s| s.get_name() == *name && !s.is_hide_set())
+            else {
+                continue;
+            };
+            let aliases = sub
+                .get_all_aliases()
+                .filter(|n| *n != "choclate")
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = writeln!(
+                table,
+                "  {:12} {:21} {}",
+                sub.get_name(),
+                if aliases.is_empty() { "-" } else { &aliases },
+                sub.get_about().map(ToString::to_string).unwrap_or_default()
+            );
+        }
+        table.push('\n');
     }
-    format!("{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n{table}\nOptions:\n{{options}}\nExamples:\n  crepe read traffic.pcap 'ip.src == 192.0.2.10' -vvX\n  crepe flows traffic.pcap --store ./flows\n  crepe flows ./flows '* | sort bytes desc | limit 10'\n  crepe forensics incident.pcap\n\nUse crepe COMMAND --help for filters, queries and examples.\nAliases select the same workflow; --serious changes diagnostics only.\n")
+    table.push_str("Help and version:\n  crepe -h / crepe COMMAND -h    Usage, flags and examples\n  crepe --version                Installed version\n\n");
+    format!("{{about-with-newline}}\n{{usage-heading}} {{usage}}\n\n{table}Global options:\n{{options}}\nQuick start:\n  crepe read traffic.pcap 'dst port 443' -c 5\n  crepe analyze traffic.pcap\n  crepe stats traffic.pcap hierarchy\n  crepe stats traffic.pcap top-talkers --format markdown -o report.md\n  crepe flows traffic.pcap --store ./flows\n\nUse crepe COMMAND -h for syntax, flags and examples.\nAliases select the same workflow; --serious changes diagnostics only.\n")
 }
 
 /// Keep examples in short and long help, including when reached through an alias.
@@ -29,6 +78,46 @@ pub fn configure(mut command: Command) -> Command {
         .collect();
     for name in names {
         let extra = match name.as_str() {
+            "stats" => r#"Reports (positional after FILE; default summary):
+  summary                 Selected packet totals and protocol counts
+  hierarchy / io,phs      Link > VLAN > IP > transport > detected application
+  protocols               Per-protocol counts (layers overlap)
+  top-talkers / talkers    Source IP ranking (sent traffic)
+  endpoints               IP involvement, both directions, once per packet/IP
+  conversations           Unordered IP pairs; aggregates ports and protocols
+  ports                   Destination protocol/port ranking
+  flags                   TCP flag counts; overlapping flags are counted separately
+  arp / syn / syn-ack      Count packets; syn includes SYN-ACK, syn-only excludes it
+  fin / rst / ack          Count packets with the named TCP flag set
+  'count FILTER' / FILTER  Count packets using read's packet-filter syntax
+
+Examples:
+  crepe stats traffic.pcap hierarchy
+  crepe stats traffic.pcap -z io,phs
+  crepe stats traffic.pcap top-talkers --top 10 --sort packets
+  crepe stats traffic.pcap arp
+  crepe stats traffic.pcap 'count syn' --filter 'dst.port == 443'
+  crepe stats traffic.pcap 'src host 192.0.2.10'
+  crepe stats traffic.pcap protocols --filter 'ip.src == 192.0.2.10'
+  crepe stats traffic.pcap top-talkers --format markdown -o report.md
+  crepe stats traffic.pcap flags --format csv > flags.csv
+
+Filters: quoted CQL/Wireshark aliases or tcpdump/BPF, as documented by read -h.
+-z supports io,phs; endpoints,ip; endpoints,ipv6; conv,ip; conv,ipv6; io,stat,0.
+The ip/ipv6 aliases select that address family; named reports include both.
+No arbitrary TShark -z expressions are supported.
+-c limits matching packets BEFORE grouping; --top limits ranking rows AFTER
+counting. Reports identify omitted groups. --max-groups caps memory; exceeding
+it fails rather than silently losing groups. Narrow --filter for large inputs.
+Bytes are ORIGINAL frame bytes, including link headers; they are not payload
+bytes. Percentages use all selected packets, including non-IP records. Protocol,
+flag and endpoint counts overlap and must not be summed as independent totals.
+Classification is packet-local (no reassembly); unknown/fragmented traffic is
+not guessed as HTTP/TLS. Use analyze for reconstructed application events.
+Empty inputs produce zero totals; --tolerant reports malformed skipped packets.
+Formats: table for terminals, markdown for reports, CSV for spreadsheets, JSON
+for complete metadata. -o publishes a NEW completed file and never overwrites.
+No import/store needed. This is a documented subset, not full TShark emulation."#,
             "plan" => "Examples:\n  crepe plan --profile chocolate --profile banane\n  crepe plan --profile sucre --enable tls\n  crepe plan --config sensor.toml --disable http --disable files\n\nResolves built-in manifests, dependencies, budgets and lifecycle before any capture.\nA disabled required dependency is an error. Repeat --profile to combine recipes.",
             "raw-prune" => "Examples:\n  crepe raw-prune ./case --max-age-seconds 86400 --max-bytes 268435456\n\nTakes the store writer lock and removes expired/oldest manifest-owned raw copies.\nNever deletes original input files or historical rows. Stop writers first.\nRaw retention is opt-in with --keep-raw or [raw] enabled = true in configuration.",
             "correlate" => r#"Examples:
@@ -93,12 +182,20 @@ Profile names in TOML and ingest --profile remain the recipe names above."#
             }
             "read" => {
                 r#"Examples:
-  crepe read traffic.pcap
+  crepe read traffic.pcap -c 5
   crepe read traffic.pcap 'dst port 443'
   crepe read traffic.pcap 'ip.src == 192.0.2.10' --format json
   crepe read http.pcap http -vvX
   crepe read traffic.pcap arp
   crepe read traffic.pcap -A | grep 'Host:'
+
+Workflow: crepe read FILE [FILTER] [OPTIONS]
+  -c 5 / --limit 5     First five matching packets, not five physical text lines
+  -v / -vv            IP details / available application headers
+  -A / -X / -XX       ASCII / hex+ASCII / full frame including link headers
+  --format json/csv   Machine-readable output (cannot combine with byte dumps)
+  -w FILE             Export the matching original packets to a NEW PCAP
+  --tolerant          Skip malformed packets; container/I/O errors still fail
 
 Filter syntax: tcpdump/BPF or Crepe CQL with selected Wireshark field aliases.
 CQL supports src.ip/dst.ip, src.port/dst.port, proto, ==, !=, &&, ||, !,
@@ -179,7 +276,8 @@ Verify the new store with query before switching a service to it."#
 Emits DNS, TLS hello, HTTP/1.1 and SSH metadata after bounded reassembly; it does
 not decrypt TLS. This command does not create a historical store. Use inspect
 --store for packets/flows plus application observations, or forensics to retain
-a case automatically. Use read for packet summaries and byte dumps."#
+a case automatically. Use read for packet summaries and byte dumps. Use stats for packet-count tables
+and protocol hierarchy; analyze emits application events, not one row per packet."#
             }
             "inspect" | "full" | "run" => {
                 r#"Examples:
@@ -219,7 +317,8 @@ query the retained store for more results. Use profiles -h to compare workflows.
 
 lo0 is typical macOS loopback; Linux uses lo and also supports any.
 Requires OS capture permissions. A quiet interface can produce no packets.
---count counts delivered records before filtering; --limit counts matches.
+--count counts delivered records before filtering; -c/--limit counts matches.
+For the first five matching TCP packets: crepe capture -i lo0 tcp -c 5.
 --write saves matching frames to a new file. --bpf is an additional BPF prefilter.
 Use read -h for packet filters and dump options. Alias: sucre."#
             }
@@ -285,6 +384,37 @@ after binary-only self-updates. See LICENSE and docs/LICENSING.md for usage term
             _ => continue,
         };
         command = command.mut_subcommand(name, |sub| sub.after_help(extra));
+    }
+    for name in ["read", "capture", "stats"] {
+        if command.get_subcommands().any(|s| s.get_name() == name) {
+            command = command.mut_subcommand(name, |mut sub| {
+                for (heading, ids) in [
+                    (
+                        "Selection and limits",
+                        &[
+                            "filter_syntax",
+                            "limit",
+                            "count",
+                            "tolerant",
+                            "top",
+                            "sort",
+                            "max_groups",
+                        ][..],
+                    ),
+                    (
+                        "Display and export",
+                        &["format", "ascii", "hex", "verbose", "write", "output"][..],
+                    ),
+                ] {
+                    for id in ids {
+                        if sub.get_arguments().any(|a| a.get_id() == *id) {
+                            sub = sub.mut_arg(*id, |arg| arg.help_heading(heading));
+                        }
+                    }
+                }
+                sub
+            });
+        }
     }
     command
 }

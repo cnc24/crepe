@@ -77,7 +77,7 @@ with tempfile.TemporaryDirectory(prefix='crepe-live-') as directory:
         records = [json.loads(line) for line in flows.stdout.splitlines()]
         assert len(records) == 1 and records[0]['packets_a'] == records[0]['packets_b'] == 1
         # Positional tcpdump syntax also works on the native loopback linktype.
-        process = start([bpf, '--duration', '3', '--limit', '1', '--format', 'json'])
+        process = start([bpf, '--duration', '3', '-c', '1', '--format', 'json'])
         try:
             sender.sendto(b'crepe-bpf-smoke', receiver.getsockname())
             assert receiver.recvfrom(512)[0] == b'crepe-bpf-smoke'
